@@ -1,0 +1,4 @@
+# eclipse
+.buildpath
+.*project*
+*.rf
