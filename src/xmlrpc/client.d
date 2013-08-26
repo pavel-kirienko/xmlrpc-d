@@ -14,6 +14,7 @@ import std.datetime : Duration, dur;
 import std.variant : Variant;
 import std.string : format;
 import std.stdio : writefln;
+import std.conv : to;
 static import curl = std.net.curl;
 
 pragma(lib, "curl");
@@ -22,8 +23,8 @@ class Client
 {
     this(string serverUri, Duration timeout = dur!"seconds"(10))
     {
-        this.serverUri = serverUri;
-        this.timeout = timeout;
+        serverUri_ = serverUri;
+        timeout_ = timeout;
     }
     
     final MethodResponseData rawCall(MethodCallData callData, bool throwOnMethodFault = false)
@@ -53,33 +54,43 @@ class Client
         return rawCall(callData, true).params;
     }
     
+    @property string serverUri() const { return serverUri_; }
+    
+    @property Duration timeout() const { return timeout_; }
+    @property void timeout(Duration timeout) { timeout_ = timeout; }
+    
 private:
     string performHttpRequest(string data)
     {
         try
         {
-            auto http = curl.HTTP(serverUri);
-            http.operationTimeout = timeout;
-            return cast(string)curl.post(serverUri, data, http);
+            auto http = curl.HTTP(serverUri_);
+            http.operationTimeout = timeout_;
+            return to!string(curl.post(serverUri_, data, http));
         }
         catch (curl.CurlException ex)
             throw new TransportException(ex);
     }
     
-    string serverUri;
-    Duration timeout;
+    const string serverUri_;
+    Duration timeout_;
 }
 
 class MethodFaultException : XmlRpcException
 {
     private this(MethodCallData callData, MethodResponseData responseData)
     {
-        const msg = format("XMLRPC method failure: %s / Call: %s",
-                           responseData.toString(), callData.toString());
+        const msg = format("XMLRPC method failure: %s / Call: %s", responseData.toString(), callData.toString());
         super(msg);
         
         if (responseData.params.length > 0)
             value = responseData.params[0];
+        
+        if (responseData.params.length != 1)
+        {
+            debug (xmlrpc)
+                writefln("Wrong number of values in the method fault response: %s", responseData.toString());
+        }
     }
     
     Variant value;
@@ -87,10 +98,13 @@ class MethodFaultException : XmlRpcException
 
 class TransportException : XmlRpcException
 {
-    this(Exception next, string file = __FILE__, size_t line = __LINE__)
+    private this(Exception nested, string file = __FILE__, size_t line = __LINE__)
     {
-        super(next.msg, file, line, next);
+        this.nested = nested;
+        super(nested.msg, file, line);
     }
+    
+    Exception nested;
 }
 
 version (xmlrpc_client_unittest) unittest
@@ -98,6 +112,7 @@ version (xmlrpc_client_unittest) unittest
     import std.stdio : writeln;
     import xmlrpc.data : prettyParams;
     import std.exception : assertThrown;
+    import std.math : approxEqual;
     
     auto client = new Client("http://1.2.3.4", dur!"msecs"(10));
     
@@ -123,7 +138,7 @@ version (xmlrpc_client_unittest) unittest
      */
     auto response = client.call!"examples.addtwodouble"(534.78, 168.36);
     assert(response.length == 1);
-    assert(response[0] == 703.14);
+    assert(approxEqual(response[0].get!double, 703.14));
     
     response = client.call!"examples.stringecho"("Hello Galaxy!");
     assert(response.length == 1);
