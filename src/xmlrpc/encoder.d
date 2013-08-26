@@ -67,6 +67,7 @@ private
     Element encodeValue(Variant param)
     {
         auto node = new Element("value");
+        // TODO: allow associative arrays with keys of arbitrary type, then silently convert to string?
         if (param.convertsTo!XmlRpcStruct)
             node ~= encodeStructValue(param);
         else if (param.convertsTo!XmlRpcArray)
@@ -107,16 +108,16 @@ private
             return new Element("boolean", param.get!bool() ? "1" : "0");
         
         if (param.convertsTo!int())
-            return new Element("int", to!string(param.get!int()));
+            return new Element("int", param.toString());
         
-        if (param.convertsTo!double())
-            return new Element("double", to!string(param.get!double()));
+        if (param.convertsTo!real())
+            return new Element("double", param.toString());
         
         if (param.convertsTo!(const(string))() ||
             param.convertsTo!(const(dstring))() ||
             param.convertsTo!(const(wstring))())
         {
-            return new Element("string", to!string(param));
+            return new Element("string", param.toString());
         }
         
         if (param.convertsTo!DateTime())
