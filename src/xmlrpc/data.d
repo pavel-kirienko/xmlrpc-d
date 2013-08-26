@@ -40,30 +40,8 @@ string prettyParams(Variant[] params)
     return reduce!((a, b) { return a ~ (a.length ? ", " : "") ~ prettyParam(b); })("", params);
 }
 
-///**
-// * Work-around for Variant containing Variant[string]
-// * Look into the decoder implementation for explanation
-// */
-//string getString(Variant v)
-//{
-//    if (v.convertsTo!string())
-//        return v.get!string;
-//    
-//    if (v.convertsTo!(char[])())
-//        return cast(string)v.get!(char[]);
-//    
-//    throw new XmlRpcException("Variant is not convertible to string from " ~ to!string(v.type()));
-//}
-//
-//bool convertsToString(Variant v)
-//{
-//    return v.convertsTo!string() || v.convertsTo!(char[])();
-//}
-
 private string prettyParam(Variant param)
 {
-//    if (convertsToString(param))
-//        return "`" ~ getString(param) ~ "`";
     if (param.convertsTo!string())
         return "`" ~ param.get!string() ~ "`";
     
@@ -87,7 +65,6 @@ private string prettyParam(Variant param)
     return to!string(param);
 }
 
-
 version (xmlrpc_unittest) unittest
 {
     import std.stdio;
@@ -95,14 +72,4 @@ version (xmlrpc_unittest) unittest
     
     auto call = MethodCallData("method", [Variant(123), Variant(["key":Variant(cast(ubyte[])x"be da ca fe")])]);
     assert(call.toString() == `method(123, ["key": hex: be da ca fe])`);
-    
-//    Variant x = 123;
-//    assert(!convertsToString(x));
-//    assertThrown!XmlRpcException(getString(x));
-//    Variant y = cast(char[])"123";
-//    assert(convertsToString(y));
-//    assert(getString(y) == "123");
-//    Variant z = "456";
-//    assert(convertsToString(z));
-//    assert(getString(z) == "456");
 }

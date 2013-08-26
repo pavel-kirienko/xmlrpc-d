@@ -115,8 +115,6 @@ private
         if (param.convertsTo!double())
             return new Element("double", to!string(param.get!double()));
         
-//        if (convertsToString(param))
-//            return new Element("string", getString(param));
         if (param.convertsTo!string())
             return new Element("string", to!string(param));
         
@@ -140,7 +138,6 @@ private
     }
 }
 
-
 version (xmlrpc_unittest) unittest
 {
     import std.stdio;
@@ -154,8 +151,6 @@ version (xmlrpc_unittest) unittest
     
     void assertResultsEqual(T)(T a, T b)
     {
-        //writeln(a.toString());
-        //writeln(b.toString());
         // Ridiculous. Variant type does not compare arrays properly:
         assert(a.toString() == b.toString());
     }
@@ -175,7 +170,6 @@ version (xmlrpc_unittest) unittest
      */
     auto methodCallData = MethodCallData("theMethod", params);
     auto encoded = encodeCall(methodCallData);
-    //writefln(pretty(encoded));
     MethodCallData decodedCall = decodeCall(pretty(encoded));
     assertResultsEqual(decodedCall, methodCallData);
     
@@ -195,11 +189,8 @@ version (xmlrpc_unittest) unittest
     methodResponseData = MethodResponseData(true, faultParams);
     encoded = encodeResponse(methodResponseData);
     decodedResponse = decodeResponse(pretty(encoded));
-    //writeln(pretty(encoded));
-    //writeln(decodedResponse.toString());
     assert(decodedResponse.fault);
     assert(decodedResponse.params.length == 1);
     assert(decodedResponse.params[0]["faultCode"] == 42);
-    //assert(getString(decodedResponse.params[0]["faultString"]) == "Fire in oxygen garden.");
     assert(decodedResponse.params[0]["faultString"] == "Fire in oxygen garden.");
 }

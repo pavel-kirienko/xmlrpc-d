@@ -140,23 +140,9 @@ private
             }
             const nameNode = find(member, "name");
             const valueNode = find(member, "value");
-            
             const key = nameNode.text();
             Variant value = decodeValue(valueNode);
-            
-//            if (value.convertsTo!string)
-//            {
-//                /*
-//                 * HACK HACK HACK HACK
-//                 * Current implementation of the Variant type will throw if this conversion is not performed
-//                 */
-//                char[] mutableString = cast(char[])value.get!string;
-//                result[key] = Variant(mutableString);
-//            }
-//            else
-            {
-                result[key] = value;
-            }
+            result[key] = value;
         }
         return Variant(result);
     }
@@ -236,7 +222,6 @@ private
     }
 }
 
-
 version (xmlrpc_unittest) unittest
 {
     /*
@@ -254,7 +239,6 @@ version (xmlrpc_unittest) unittest
   </params>
 </methodCall>`;
     auto call = decodeCall(s);
-    //writeln(call.toString());
     assert(call.name == "examples.getStateName");
     assert(call.params[0] == 40);
     assert(call.params[1] == "South Dakota");
@@ -280,7 +264,6 @@ version (xmlrpc_unittest) unittest
   </params>
 </methodResponse>`;
     auto resp = decodeResponse(s);
-    //writeln(resp.toString());
     assert(!resp.fault);
     assert(resp.params[0][0] == 12);
     assert(resp.params[0][1] == "Egypt");
@@ -302,7 +285,6 @@ version (xmlrpc_unittest) unittest
   </params>
 </methodResponse>`;
     resp = decodeResponse(s);
-    //writeln(resp.toString());
     assert(!resp.fault);
     assert(resp.params[0] == "40");
     assert(resp.params[1] == "South Dakota");
@@ -327,10 +309,8 @@ version (xmlrpc_unittest) unittest
    </fault>
 </methodResponse>`;
     resp = decodeResponse(s);
-    //writeln(resp.toString());
     assert(resp.fault);
     assert(resp.params[0]["faultCode"] == 4);
-    //assert(getString(resp.params[0]["faultString"]) == "Negative, Cassie. Computer control.");
     assert(resp.params[0]["faultString"] == "Negative, Cassie. Computer control.");
     
     /*
@@ -360,12 +340,10 @@ version (xmlrpc_unittest) unittest
   </params>
 </methodCall>`;
     call = decodeCall(s);
-    //writeln(call.toString());
     assert(call.name == "theMethod");
     Variant arrays = call.params[0]["arrays"];
     assert(arrays[0][0] == 10);
     assert(arrays[1][0] == 15);
-    //assert(getString(call.params[0]["question"]) == "Kaneda, what do you see? Kaneda!");
     assert(call.params[0]["question"] == "Kaneda, what do you see? Kaneda!");
     assert(call.params[1] == DateTime(1998, 7, 17, 14, 8, 55));
 }

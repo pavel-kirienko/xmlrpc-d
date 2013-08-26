@@ -93,7 +93,6 @@ class TransportException : XmlRpcException
     }
 }
 
-
 version (xmlrpc_unittest) unittest
 {
     import std.stdio : writeln;

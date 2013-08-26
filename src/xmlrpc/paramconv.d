@@ -9,7 +9,7 @@ import xmlrpc.data;
 import std.variant : Variant;
 import std.range : isForwardRange;
 import std.conv : to;
-import std.traits : isAssociativeArray, isImplicitlyConvertible;
+import std.traits : isAssociativeArray, isImplicitlyConvertible, KeyType;
 
 Variant[] paramsToVariantArray(Args...)(Args args)
 {
@@ -19,61 +19,36 @@ Variant[] paramsToVariantArray(Args...)(Args args)
     return result;
 }
 
-private
+private Variant paramToVariant(Arg)(Arg arg)
 {
-    Variant paramToVariant(Arg)(Arg arg)
+    static if (is(Arg : Variant))
     {
-        static if (is(Arg : Variant))
-        {
-            return arg;
-        }
-        else static if (isForwardRange!Arg && !isImplicitlyConvertible!(Arg, const(char[])))
-        {
-            Variant[] array;
-            foreach (a; arg)
-                array ~= paramToVariant(a);
-            return Variant(array);
-        }
-        else static if (isAssociativeArray!Arg)
-        {
-            static assert(isImplicitlyConvertible!(KeyType!Arg, const(char[])) || is(KeyType!Arg == Variant),
-                          "Associative array key type must be string, implicitly convertible to string, or Variant");
-            Variant[string] hash;
-            foreach (key, rawValue; arg)
-            {
-                Variant value = paramToVariant(rawValue);
-//                if (value.convertsTo!string)
-//                {
-//                    /*
-//                     * HACK HACK HACK HACK
-//                     * Current implementation of the Variant type will throw if this conversion is not performed
-//                     */
-//                    char[] mutableString = cast(char[])value.get!string;
-//                    hash[to!string(key)] = mutableString;
-//                }
-//                else
-                {
-                    hash[to!string(key)] = value;
-                }
-            }
-            return Variant(hash);
-        }
-        else
-        {
-            return Variant(arg);
-        }
+        return arg;
     }
-    
-    // http://forum.dlang.org/thread/mailman.753.1327358664.16222.digitalmars-d-learn@puremagic.com
-    template KeyType(AA) if (isAssociativeArray!AA)
+    else static if (isForwardRange!Arg && !isImplicitlyConvertible!(Arg, const(char[])))
     {
-       static if (is(AA V : V[K], K))
-       {
-           alias K KeyType;
-       }
+        Variant[] array;
+        foreach (a; arg)
+            array ~= paramToVariant(a);
+        return Variant(array);
+    }
+    else static if (isAssociativeArray!Arg)
+    {
+        static assert(isImplicitlyConvertible!(KeyType!Arg, const(char[])) || is(KeyType!Arg == Variant),
+                      "Associative array key type must be string, implicitly convertible to string, or Variant");
+        Variant[string] hash;
+        foreach (key, rawValue; arg)
+        {
+            Variant value = paramToVariant(rawValue);
+            hash[to!string(key)] = value;
+        }
+        return Variant(hash);
+    }
+    else
+    {
+        return Variant(arg);
     }
 }
-
 
 version (xmlrpc_unittest) unittest
 {
@@ -90,7 +65,6 @@ version (xmlrpc_unittest) unittest
     assert(converted["test"][1] == 789);
     
     converted = paramToVariant(["test": ["nested": "string value"]]);
-    //assert(getString(converted["test"]["nested"]) == "string value");
     assert(converted["test"]["nested"] == "string value");
     
     /*
@@ -113,6 +87,5 @@ version (xmlrpc_unittest) unittest
      * Group conversions
      */
     Variant[] va = paramsToVariantArray("string", 123, [465, 789], Variant("variant"), ["key": "value"]);
-    //writeln(to!string(va));
     assert(to!string(va) == `[string, 123, [465, 789], variant, ["key":value]]`);
 }
