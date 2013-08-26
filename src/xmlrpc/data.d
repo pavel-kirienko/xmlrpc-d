@@ -42,11 +42,11 @@ string prettyParams(Variant[] params)
 
 private string prettyParam(Variant param)
 {
-    if (param.convertsTo!string())
-        return "`" ~ param.get!string() ~ "`";
+    if (param.convertsTo!string() || param.convertsTo!wstring() || param.convertsTo!dstring())
+        return "`" ~ to!string(param) ~ "`";
     
-    if (param.convertsTo!(ubyte[]))
-        return reduce!((a, b) { return format("%s %02x", a, b); })("hex:", param.get!(ubyte[])());
+    if (param.convertsTo!(const(ubyte[])))
+        return reduce!((a, b) { return format("%s %02x", a, b); })("hex:", param.get!(const(ubyte[]))());
     
     if (param.convertsTo!XmlRpcArray)
         return "[" ~ prettyParams(param.get!XmlRpcArray) ~ "]";
@@ -70,6 +70,9 @@ version (xmlrpc_unittest) unittest
     import std.stdio;
     import std.exception;
     
-    auto call = MethodCallData("method", [Variant(123), Variant(["key":Variant(cast(ubyte[])x"be da ca fe")])]);
-    assert(call.toString() == `method(123, ["key": hex: be da ca fe])`);
+    auto call = MethodCallData("method", [Variant(123),
+                                          Variant(["key":Variant(cast(ubyte[])x"dead")]),
+                                          Variant(cast(const ubyte[])x"cafe")]);
+    //writeln(call.toString());
+    assert(call.toString() == `method(123, ["key": hex: de ad], hex: ca fe)`);
 }

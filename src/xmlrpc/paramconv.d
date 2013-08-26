@@ -9,7 +9,7 @@ import xmlrpc.data;
 import std.variant : Variant;
 import std.range : isForwardRange;
 import std.conv : to;
-import std.traits : isAssociativeArray, isImplicitlyConvertible, KeyType;
+import std.traits : isAssociativeArray, isImplicitlyConvertible, KeyType, isSomeString, isScalarType, Unqual;
 
 Variant[] paramsToVariantArray(Args...)(Args args)
 {
@@ -21,11 +21,15 @@ Variant[] paramsToVariantArray(Args...)(Args args)
 
 private Variant paramToVariant(Arg)(Arg arg)
 {
-    static if (is(Arg : Variant))
+    static if (isImplicitlyConvertible!(Arg, Variant))
     {
         return arg;
     }
-    else static if (isForwardRange!Arg && !isImplicitlyConvertible!(Arg, const(char[])))
+    else static if (isSomeString!Arg || isImplicitlyConvertible!(Arg, const(string)))
+    {
+        return Variant(to!string(arg));     // NOTE: 'wstring', 'dstring' are converted to 'string'
+    }
+    else static if (isForwardRange!Arg)     // Order matters because strings are forward ranges too.
     {
         Variant[] array;
         foreach (a; arg)
@@ -34,15 +38,21 @@ private Variant paramToVariant(Arg)(Arg arg)
     }
     else static if (isAssociativeArray!Arg)
     {
-        static assert(isImplicitlyConvertible!(KeyType!Arg, const(char[])) || is(KeyType!Arg == Variant),
+        static assert(isSomeString!(KeyType!Arg) ||
+                      isImplicitlyConvertible!(KeyType!Arg, const(string)) ||
+                      is(KeyType!Arg == Variant),
                       "Associative array key type must be string, implicitly convertible to string, or Variant");
         Variant[string] hash;
         foreach (key, rawValue; arg)
         {
             Variant value = paramToVariant(rawValue);
-            hash[to!string(key)] = value;
+            hash[to!string(key)] = value;              // NOTE: Any Variant will be silently turned into string
         }
         return Variant(hash);
+    }
+    else static if (isScalarType!Arg)                  // NOTE: Get rid of type qualifiers
+    {
+        return Variant(cast(Unqual!Arg)arg);
     }
     else
     {
@@ -60,11 +70,12 @@ version (xmlrpc_unittest) unittest
      */
     assert(paramToVariant(123) == 123);
     
-    Variant converted = paramToVariant(["test": [456, 789]]);
+    Variant converted = paramToVariant(["test": [cast(immutable)456, cast(const)789]]);
+    assert(converted["test"][0].type() == typeid(int));
     assert(converted["test"][0] == 456);
     assert(converted["test"][1] == 789);
     
-    converted = paramToVariant(["test": ["nested": "string value"]]);
+    converted = paramToVariant(["test": ["nested"w: "string value"d]]);
     assert(converted["test"]["nested"] == "string value");
     
     /*

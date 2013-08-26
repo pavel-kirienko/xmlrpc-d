@@ -14,6 +14,7 @@ import std.string : join;
 import std.variant : Variant;
 import std.datetime : DateTime;
 import std.base64 : Base64;
+import std.stdio : writeln;
 
 class EncoderException : XmlRpcException
 {
@@ -42,9 +43,7 @@ Element encodeResponse(MethodResponseData resp)
         root ~= fault;
     }
     else
-    {
         root ~= encodeParams(resp.params);
-    }
     return root;
 }
 
@@ -68,9 +67,9 @@ private
     Element encodeValue(Variant param)
     {
         auto node = new Element("value");
-        if (param.type() == typeid(XmlRpcStruct))
+        if (param.convertsTo!XmlRpcStruct)
             node ~= encodeStructValue(param);
-        else if (param.type() == typeid(XmlRpcArray))
+        else if (param.convertsTo!XmlRpcArray)
             node ~= encodeArrayValue(param);
         else
             node ~= encodePrimitiveValue(param);
@@ -80,7 +79,7 @@ private
     Element encodeStructValue(Variant param)
     {
         auto structNode = new Element("struct");
-        foreach (string key, ref Variant value; param.get!XmlRpcStruct())
+        foreach (key, ref value; param.get!XmlRpcStruct())
         {
             auto member = new Element("member");
             member ~= new Element("name", key);
@@ -95,40 +94,42 @@ private
         auto array = new Element("array");
         auto data = new Element("data");
         foreach (ref value; param.get!XmlRpcArray)
-        {
             data ~= encodeValue(value);
-        }
         array ~= data;
         return array;
     }
     
     Element encodePrimitiveValue(Variant param)
     {
-        // Almost everything converts to boolean, thus we need to check the exact type match
+        // Seems that Variant has some issues with const/immutable value types (ref types are fine)
+        // Almost everything converts to boolean, thus we need to check the exact type match here:
         if (param.type() == typeid(bool))
             return new Element("boolean", param.get!bool() ? "1" : "0");
         
-        // Boolean implicitly converts to integer, thus the former must be checked first
         if (param.convertsTo!int())
             return new Element("int", to!string(param.get!int()));
         
         if (param.convertsTo!double())
             return new Element("double", to!string(param.get!double()));
         
-        if (param.convertsTo!string())
+        if (param.convertsTo!(const(string))() ||
+            param.convertsTo!(const(dstring))() ||
+            param.convertsTo!(const(wstring))())
+        {
             return new Element("string", to!string(param));
+        }
         
         if (param.convertsTo!DateTime())
         {
-            auto dt = param.get!DateTime();
+            const dt = param.get!DateTime();
             return new Element("dateTime.iso8601", dt.toISOString());
         }
         
-        if (param.convertsTo!(ubyte[])())
+        if (param.convertsTo!(const(ubyte[]))())
         {
-            ubyte[] source = param.get!(ubyte[])();
+            const source = param.get!(const(ubyte[]))();
             char[] encoded = Base64.encode(source);
-            return new Element("base64", cast(string)encoded);
+            return new Element("base64", to!string(encoded));
         }
         
         if (param.convertsTo!(typeof(null)) && param.get!(typeof(null))() == null)
@@ -140,7 +141,6 @@ private
 
 version (xmlrpc_unittest) unittest
 {
-    import std.stdio;
     import xmlrpc.decoder;
     static import xmlrpc.paramconv;
     
@@ -151,15 +151,23 @@ version (xmlrpc_unittest) unittest
     
     void assertResultsEqual(T)(T a, T b)
     {
+        writeln(a.toString());
+        //writeln(b.toString());
         // Ridiculous. Variant type does not compare arrays properly:
         assert(a.toString() == b.toString());
     }
     
     // Hardcore parameter set
-    Variant[] params = [Variant(123), xmlrpc.decoder.Variant("Our sun is dying."),
-                        Variant([Variant(123), Variant(12.3), Variant("123"), Variant(0), Variant(0.0)]),
+    Variant[] params = [Variant(123),
+                        Variant(cast(const)"Our sun is dying."),
+                        Variant([Variant(123),
+                                 Variant(12.3),
+                                 Variant("abc"d),
+                                 Variant(0),
+                                 Variant(true),
+                                 Variant(null)]),
                         Variant(DateTime(2013, 8, 25, 13, 38, 42)),
-                        Variant(cast(ubyte[])x"de ad be ef"),
+                        Variant(cast(const(ubyte[]))x"de ad be ef"),
                         Variant(["null":Variant(null)]),
                         Variant(["true":Variant(true)]),
                         Variant(["false":Variant(false)]),
@@ -184,8 +192,8 @@ version (xmlrpc_unittest) unittest
     /*
      * Fault response
      */
-    auto faultParams = xmlrpc.paramconv.paramsToVariantArray(["faultCode": Variant(42),
-                                                              "faultString": Variant("Fire in oxygen garden.")]);
+    auto faultParams = xmlrpc.paramconv.paramsToVariantArray(["faultCode"w: Variant(42),
+                                                              "faultString": Variant("Fire in oxygen garden."d)]);
     methodResponseData = MethodResponseData(true, faultParams);
     encoded = encodeResponse(methodResponseData);
     decodedResponse = decodeResponse(pretty(encoded));
