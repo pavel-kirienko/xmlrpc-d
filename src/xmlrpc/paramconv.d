@@ -11,7 +11,7 @@ import std.range : isForwardRange;
 import std.conv : to;
 import std.traits : isAssociativeArray, isImplicitlyConvertible, KeyType, isSomeString, isScalarType, Unqual;
 
-Variant[] paramsToVariantArray(Args...)(Args args)
+package Variant[] paramsToVariantArray(Args...)(Args args)
 {
     Variant[] result;
     foreach (a; args)

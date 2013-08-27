@@ -24,6 +24,8 @@ class EncoderException : XmlRpcException
     }
 }
 
+package:
+
 Element encodeCall(MethodCallData call)
 {
     auto root = new Element("methodCall");
@@ -47,97 +49,100 @@ Element encodeResponse(MethodResponseData resp)
     return root;
 }
 
-private
+private:
+
+Element encodeParams(Variant[] params)
 {
-    Element encodeParams(Variant[] params)
+    auto node = new Element("params");
+    foreach (ref par; params)
+        node ~= encodeParam(par);
+    return node;
+}
+
+Element encodeParam(Variant param)
+{
+    auto node = new Element("param");
+    node ~= encodeValue(param);
+    return node;
+}
+
+Element encodeValue(Variant param)
+{
+    auto node = new Element("value");
+    // TODO: allow associative arrays with keys of arbitrary type, then silently convert to string?
+    if (param.convertsTo!XmlRpcStruct)
+        node ~= encodeStructValue(param);
+    else if (param.convertsTo!XmlRpcArray)
+        node ~= encodeArrayValue(param);
+    else
+        node ~= encodePrimitiveValue(param);
+    return node;
+}
+
+Element encodeStructValue(Variant param)
+{
+    auto structNode = new Element("struct");
+    foreach (key, ref value; param.get!XmlRpcStruct())
     {
-        auto node = new Element("params");
-        foreach (ref par; params)
-            node ~= encodeParam(par);
-        return node;
+        auto member = new Element("member");
+        member ~= new Element("name", key);
+        member ~= encodeValue(value);
+        structNode ~= member;
+    }
+    return structNode;
+}
+
+Element encodeArrayValue(Variant param)
+{
+    auto array = new Element("array");
+    auto data = new Element("data");
+    foreach (ref value; param.get!XmlRpcArray)
+        data ~= encodeValue(value);
+    array ~= data;
+    return array;
+}
+
+Element encodePrimitiveValue(Variant param)
+{
+    // Almost everything converts to boolean, thus we need to check the exact type match here:
+    if (param.type() == typeid(bool))
+        return new Element("boolean", param.get!bool() ? "1" : "0");
+    
+    if (param.convertsTo!int() || param.convertsTo!uint())
+        return new Element("int", param.toString());
+    
+    // Extension (64-bit signed integer)
+    if (param.convertsTo!long() || param.convertsTo!ulong())
+        return new Element("i8", param.toString());
+    
+    if (param.convertsTo!real())
+        return new Element("double", param.toString());
+    
+    if (param.convertsTo!(const(string))() ||
+        param.convertsTo!(const(dstring))() ||
+        param.convertsTo!(const(wstring))())
+    {
+        return new Element("string", param.toString());
     }
     
-    Element encodeParam(Variant param)
+    if (param.convertsTo!DateTime())
     {
-        auto node = new Element("param");
-        node ~= encodeValue(param);
-        return node;
+        const dt = param.get!DateTime();
+        return new Element("dateTime.iso8601", dt.toISOString());
     }
     
-    Element encodeValue(Variant param)
+    if (param.convertsTo!(const(ubyte[]))())
     {
-        auto node = new Element("value");
-        // TODO: allow associative arrays with keys of arbitrary type, then silently convert to string?
-        if (param.convertsTo!XmlRpcStruct)
-            node ~= encodeStructValue(param);
-        else if (param.convertsTo!XmlRpcArray)
-            node ~= encodeArrayValue(param);
-        else
-            node ~= encodePrimitiveValue(param);
-        return node;
+        const source = param.get!(const(ubyte[]))();
+        char[] encoded = Base64.encode(source);
+        return new Element("base64", to!string(encoded));
     }
     
-    Element encodeStructValue(Variant param)
-    {
-        auto structNode = new Element("struct");
-        foreach (key, ref value; param.get!XmlRpcStruct())
-        {
-            auto member = new Element("member");
-            member ~= new Element("name", key);
-            member ~= encodeValue(value);
-            structNode ~= member;
-        }
-        return structNode;
-    }
+    // Extension (nil)
+    if (param.convertsTo!(typeof(null)) && param.get!(typeof(null))() == null)
+        return new Element("nil");
     
-    Element encodeArrayValue(Variant param)
-    {
-        auto array = new Element("array");
-        auto data = new Element("data");
-        foreach (ref value; param.get!XmlRpcArray)
-            data ~= encodeValue(value);
-        array ~= data;
-        return array;
-    }
-    
-    Element encodePrimitiveValue(Variant param)
-    {
-        // Seems that Variant has some issues with const/immutable value types (ref types are fine)
-        // Almost everything converts to boolean, thus we need to check the exact type match here:
-        if (param.type() == typeid(bool))
-            return new Element("boolean", param.get!bool() ? "1" : "0");
-        
-        if (param.convertsTo!int())
-            return new Element("int", param.toString());
-        
-        if (param.convertsTo!real())
-            return new Element("double", param.toString());
-        
-        if (param.convertsTo!(const(string))() ||
-            param.convertsTo!(const(dstring))() ||
-            param.convertsTo!(const(wstring))())
-        {
-            return new Element("string", param.toString());
-        }
-        
-        if (param.convertsTo!DateTime())
-        {
-            const dt = param.get!DateTime();
-            return new Element("dateTime.iso8601", dt.toISOString());
-        }
-        
-        if (param.convertsTo!(const(ubyte[]))())
-        {
-            const source = param.get!(const(ubyte[]))();
-            char[] encoded = Base64.encode(source);
-            return new Element("base64", to!string(encoded));
-        }
-        
-        if (param.convertsTo!(typeof(null)) && param.get!(typeof(null))() == null)
-            return new Element("nil");
-        
-        throw new EncoderException(format("Unable to encode the value of type %s", param.type()));
-    }
+    throw new EncoderException(format("Unable to encode the value of type %s", param.type()));
 }
 
 version (xmlrpc_unittest) unittest
@@ -154,13 +159,14 @@ version (xmlrpc_unittest) unittest
     {
         writeln(a.toString());
         //writeln(b.toString());
-        // Ridiculous. Variant type does not compare arrays properly:
+        // Variant type does not compare arrays properly
         assert(a.toString() == b.toString());
     }
     
     // Hardcore parameter set
-    Variant[] params = [Variant(123),
+    Variant[] params = [Variant(123U),
                         Variant(cast(const)"Our sun is dying."),
+                        Variant(0xc0a1_e5ce_d64b_17UL),
                         Variant([Variant(123),
                                  Variant(12.3),
                                  Variant("abc"d),

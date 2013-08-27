@@ -35,7 +35,7 @@ struct MethodResponseData
     }
 }
 
-string prettyParams(Variant[] params)
+package string prettyParams(Variant[] params)
 {
     return reduce!((a, b) { return a ~ (a.length ? ", " : "") ~ prettyParam(b); })("", params);
 }

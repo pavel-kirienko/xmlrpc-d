@@ -26,6 +26,8 @@ class DecoderException : XmlRpcException
     }
 }
 
+package:
+
 MethodCallData decodeCall(in Element call)
 {
     MethodCallData result;
@@ -62,164 +64,163 @@ auto decodeResponse(string text)
     return decodeResponse(new Document(text));
 }
 
-private
+private:
+
+auto decodeParams(in Element params)
 {
-    auto decodeParams(in Element params)
+    Variant[] result;
+    if (params is null)      // Parameters are optional
+        return result;
+    
+    foreach (param; params.elements)
     {
-        Variant[] result;
-        if (params is null)      // Parameters are optional
-            return result;
-        
-        foreach (param; params.elements)
+        if (param.tag.name != "param")
         {
-            if (param.tag.name != "param")
-            {
-                debug (xmlrpc)
-                    writeln("Decoder: Invalid parameter tag: ", param.tag.name);
-                continue;
-            }
+            debug (xmlrpc)
+                writeln("Decoder: Invalid parameter tag: ", param.tag.name);
+            continue;
+        }
+        debug (xmlrpc)
+        {
+            if (param.elements.length != 1)
+                writeln("Decoder: Parameter must contain exactly one sub-element, not ", param.elements.length);
+        }
+        result ~= decodeParam(param);
+    }
+    return result;
+}
+
+auto decodeFault(in Element fault)
+{
+    Variant[] result;
+    auto value = tryFind(fault, "value");
+    if (value)
+        result ~= decodeValue(value);
+    return result;
+}
+
+auto decodeParam(in Element param)
+{
+    return decodeValue(find(param, "value"));
+}
+
+Variant decodeValue(in Element value)
+{
+    Rebindable!(const Element) storage;
+    string type;
+    if (value.elements.length == 0)   // Default is string
+    {
+        storage = value;
+        type = "string";
+    }
+    else
+    {
+        enforce(value.elements.length == 1, new DecoderException("Value tag must have at most one sub-element"));
+        storage = value.elements[0];
+        type = storage.tag.name;
+    }
+    
+    if (type == "struct")
+        return decodeStructValue(storage);
+    
+    if (type == "array")
+        return decodeArrayValue(storage);
+    
+    return decodePrimitiveValue(storage, type);
+}
+
+Variant decodeStructValue(in Element storage)
+{
+    Variant[string] result;
+    foreach (member; storage.elements)
+    {
+        if (member.tag.name != "member")
+        {
+            debug (xmlrpc)
+                writeln("Invalid struct subelement: ", member.tag.name);
+            continue;
+        }
+        const nameNode = find(member, "name");
+        const valueNode = find(member, "value");
+        const key = nameNode.text();
+        Variant value = decodeValue(valueNode);
+        result[key] = value;
+    }
+    return Variant(result);
+}
+
+Variant decodeArrayValue(in Element storage)
+{
+    Variant[] result;
+    const data = find(storage, "data");
+    foreach (value; data.elements)
+    {
+        if (value.tag.name != "value")
+        {
+            debug (xmlrpc)
+                writeln("Invalid array member tag: ", value.tag.name);
+            continue;
+        }
+        result ~= decodeValue(value);
+    }
+    return Variant(result);
+}
+
+Variant decodePrimitiveValue(in Element storage, string type)
+{
+    string data = storage.text();
+    switch (type)
+    {
+        case "int":
+        case "i4":
+            return Variant(to!int(data));
+        
+        case "i8":
+            return Variant(to!long(data));
+        
+        case "string":
+            return Variant(data);
+        
+        case "double":
+            return Variant(to!double(data));
+        
+        case "boolean":
             debug (xmlrpc)
             {
-                if (param.elements.length != 1)
-                    writeln("Decoder: Parameter must contain exactly one sub-element, not ", param.elements.length);
+                if (data != "0" && data != "1")
+                    writeln("Invalid literal for boolean: " ~ data);
             }
-            result ~= decodeParam(param);
-        }
-        return result;
-    }
-    
-    auto decodeFault(in Element fault)
-    {
-        Variant[] result;
-        auto value = tryFind(fault, "value");
-        if (value)
-            result ~= decodeValue(value);
-        return result;
-    }
-    
-    auto decodeParam(in Element param)
-    {
-        return decodeValue(find(param, "value"));
-    }
-    
-    Variant decodeValue(in Element value)
-    {
-        Rebindable!(const Element) storage;
-        string type;
-        if (value.elements.length == 0)   // Default is string
-        {
-            storage = value;
-            type = "string";
-        }
-        else
-        {
-            enforce(value.elements.length == 1, new DecoderException("Value tag must have at most one sub-element"));
-            storage = value.elements[0];
-            type = storage.tag.name;
-        }
+            return Variant(to!int(data) != 0);            // Sloppy conversion
         
-        if (type == "struct")
-            return decodeStructValue(storage);
+        case "dateTime.iso8601":
+            data = replace(data, ":", "");                // Conversion to the basic format
+            data = replace(data, "-", "");
+            return Variant(DateTime.fromISOString(data));
         
-        if (type == "array")
-            return decodeArrayValue(storage);
+        case "base64":
+            return Variant(Base64.decode(data));
         
-        return decodePrimitiveValue(storage, type);
-    }
-    
-    Variant decodeStructValue(in Element storage)
-    {
-        Variant[string] result;
-        foreach (member; storage.elements)
-        {
-            if (member.tag.name != "member")
-            {
-                debug (xmlrpc)
-                    writeln("Invalid struct subelement: ", member.tag.name);
-                continue;
-            }
-            const nameNode = find(member, "name");
-            const valueNode = find(member, "value");
-            const key = nameNode.text();
-            Variant value = decodeValue(valueNode);
-            result[key] = value;
-        }
-        return Variant(result);
-    }
-    
-    Variant decodeArrayValue(in Element storage)
-    {
-        Variant[] result;
-        const data = find(storage, "data");
-        foreach (value; data.elements)
-        {
-            if (value.tag.name != "value")
-            {
-                debug (xmlrpc)
-                    writeln("Invalid array member tag: ", value.tag.name);
-                continue;
-            }
-            result ~= decodeValue(value);
-        }
-        return Variant(result);
-    }
-    
-    Variant decodePrimitiveValue(in Element storage, string type)
-    {
-        string data = storage.text();
-        switch (type)
-        {
-            case "int":
-            case "i4":
-                return Variant(to!int(data));
-            
-            case "string":
-                return Variant(data);
-            
-            case "double":
-                return Variant(to!double(data));
-            
-            case "boolean":
-                immutable s = strip(data);
-                if (s == "0")
-                    return Variant(false);
-                if (s == "1")
-                    return Variant(true);
-                throw new DecoderException("Invalid literal for boolean: " ~ s);
-            
-            case "dateTime.iso8601":
-                data = replace(data, ":", "");                // Conversion to the basic format
-                data = replace(data, "-", "");
-                return Variant(DateTime.fromISOString(data));
-            
-            case "base64":
-                return Variant(Base64.decode(data));
-            
-            case "nil":
-                return Variant(null);
-            
-            default:
-                throw new DecoderException("Unknown XMLRPC type " ~ type);
-        }
+        case "nil":
+            return Variant(null);
+        
+        default:
+            throw new DecoderException("Unknown XMLRPC type " ~ type);
     }
 }
 
-private
+const(Element) tryFind(in Element e, string tag)
 {
-    const(Element) tryFind(in Element e, string tag)
-    {
-        foreach (sub; e.elements)
-            if (sub.tag.name == tag)
-                return sub;
-        return null;
-    }
-    
-    const(Element) find(in Element e, string tag)
-    {
-        const res = tryFind(e, tag);
-        enforce(res !is null, new DecoderException(format("Element <%s> does not contain <%s>", e.tag.name, tag)));
-        return res;
-    }
+    foreach (sub; e.elements)
+        if (sub.tag.name == tag)
+            return sub;
+    return null;
+}
+
+const(Element) find(in Element e, string tag)
+{
+    const res = tryFind(e, tag);
+    enforce(res !is null, new DecoderException(format("Element <%s> does not contain <%s>", e.tag.name, tag)));
+    return res;
 }
 
 version (xmlrpc_unittest) unittest
