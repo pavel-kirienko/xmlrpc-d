@@ -26,15 +26,15 @@ class EncoderException : XmlRpcException
 
 package:
 
-Element encodeCall(MethodCallData call)
+string encodeCall(MethodCallData call)
 {
     auto root = new Element("methodCall");
     root ~= new Element("methodName", call.name);
     root ~= encodeParams(call.params);
-    return root;
+    return toString(root);
 }
 
-Element encodeResponse(MethodResponseData resp)
+string encodeResponse(MethodResponseData resp)
 {
     auto root = new Element("methodResponse");
     if (resp.fault)
@@ -46,7 +46,7 @@ Element encodeResponse(MethodResponseData resp)
     }
     else
         root ~= encodeParams(resp.params);
-    return root;
+    return toString(root);
 }
 
 private:
@@ -145,15 +145,15 @@ Element encodePrimitiveValue(Variant param)
     throw new EncoderException(format("Unable to encode the value of type %s", param.type()));
 }
 
+string toString(in Element e)
+{
+    return join(e.pretty(0), "\n");
+}
+
 version (xmlrpc_unittest) unittest
 {
     import xmlrpc.decoder;
     static import xmlrpc.paramconv;
-    
-    string pretty(in Element e)
-    {
-        return join(e.pretty(4), "\n");
-    }
     
     void assertResultsEqual(T)(T a, T b)
     {
@@ -185,7 +185,7 @@ version (xmlrpc_unittest) unittest
      */
     auto methodCallData = MethodCallData("theMethod", params);
     auto encoded = encodeCall(methodCallData);
-    MethodCallData decodedCall = decodeCall(pretty(encoded));
+    MethodCallData decodedCall = decodeCall(encoded);
     assertResultsEqual(decodedCall, methodCallData);
     
     /*
@@ -193,7 +193,7 @@ version (xmlrpc_unittest) unittest
      */
     auto methodResponseData = MethodResponseData(false, params);
     encoded = encodeResponse(methodResponseData);
-    MethodResponseData decodedResponse = decodeResponse(pretty(encoded));
+    MethodResponseData decodedResponse = decodeResponse(encoded);
     assertResultsEqual(decodedResponse, methodResponseData);
     
     /*
@@ -203,7 +203,7 @@ version (xmlrpc_unittest) unittest
                                                               "faultString": Variant("Fire in oxygen garden."d)]);
     methodResponseData = MethodResponseData(true, faultParams);
     encoded = encodeResponse(methodResponseData);
-    decodedResponse = decodeResponse(pretty(encoded));
+    decodedResponse = decodeResponse(encoded);
     assert(decodedResponse.fault);
     assert(decodedResponse.params.length == 1);
     assert(decodedResponse.params[0]["faultCode"] == 42);

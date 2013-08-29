@@ -28,22 +28,19 @@ class DecoderException : XmlRpcException
 
 package:
 
-MethodCallData decodeCall(in Element call)
+MethodCallData decodeCall(string text)
 {
+    const call = new Document(text);
     MethodCallData result;
     result.name = find(call, "methodName").text();
     result.params = decodeParams(tryFind(call, "params"));
     return result;
 }
 
-auto decodeCall(string text)
-{
-    return decodeCall(new Document(text));
-}
-
-MethodResponseData decodeResponse(in Element resp)
+MethodResponseData decodeResponse(string text)
 {
     MethodResponseData result;
+    const resp = new Document(text);
     
     const fault = tryFind(resp, "fault");
     if (fault)
@@ -57,11 +54,6 @@ MethodResponseData decodeResponse(in Element resp)
         result.params = decodeParams(tryFind(resp, "params"));
     }
     return result;
-}
-
-auto decodeResponse(string text)
-{
-    return decodeResponse(new Document(text));
 }
 
 private:

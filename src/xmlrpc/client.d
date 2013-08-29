@@ -29,8 +29,7 @@ class Client
     
     final MethodResponseData rawCall(MethodCallData callData, bool throwOnMethodFault = false)
     {
-        auto request = encodeCall(callData);
-        immutable requestString = request.toString();
+        const requestString = encodeCall(callData);
         
         debug (xmlrpc)
             writefln("client ==> %s", callData.toString());
