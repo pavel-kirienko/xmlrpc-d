@@ -8,7 +8,7 @@ module xmlrpc.client;
 import xmlrpc.encoder : encodeCall;
 import xmlrpc.decoder : decodeResponse;
 import xmlrpc.data : MethodCallData, MethodResponseData;
-import xmlrpc.paramconv : paramsToVariantArray;
+import xmlrpc.paramconv : paramsToVariantArray, variantArrayToParams;
 import xmlrpc.exception : XmlRpcException;
 import std.datetime : Duration, dur;
 import std.variant : Variant;
@@ -47,11 +47,24 @@ class Client
         return responseData;
     }
     
-    final Variant[] call(string methodName, Args...)(Args args)
+    template call(string methodName, ReturnTypes...)
     {
-        auto requestParams = paramsToVariantArray(args);
-        auto callData = MethodCallData(methodName, requestParams);
-        return rawCall(callData, true).params;
+        final auto call(Args...)(Args args)
+        {
+            auto requestParams = paramsToVariantArray(args);
+            auto callData = MethodCallData(methodName, requestParams);
+            Variant[] vars = rawCall(callData, true).params;
+            
+            // Perform automatic return type conversion if requested, otherwise return Variant[] as is
+            static if (ReturnTypes.length == 0)
+            {
+                return vars;
+            }
+            else
+            {
+                return variantArrayToParams!(ReturnTypes)(vars);
+            }
+        }
     }
     
     @property string serverUri() const { return serverUri_; }
@@ -124,7 +137,7 @@ version (xmlrpc_client_unittest) unittest
     // Should fail and throw:
     try
     {
-        client.call!"nonExistentMethod"("Wrong", "parameters");
+        Variant[] raw = client.call!"nonExistentMethod"("Wrong", "parameters");
         assert(false);
     }
     catch (MethodFaultException ex)
@@ -136,27 +149,26 @@ version (xmlrpc_client_unittest) unittest
     /*
      * Misc logic checks
      */
-    auto response = client.call!"examples.addtwodouble"(534.78, 168.36);
-    assert(response.length == 1);
-    assert(approxEqual(response[0].get!double, 703.14));
+    double resp1 = client.call!("examples.addtwodouble", double)(534.78, 168.36);
+    assert(approxEqual(resp1, 703.14));
     
-    response = client.call!"examples.stringecho"("Hello Galaxy!");
-    assert(response.length == 1);
-    assert(response[0] == "Hello Galaxy!");
+    string resp2 = client.call!("examples.stringecho", string)("Hello Galaxy!");
+    assert(resp2 == "Hello Galaxy!");
     
-    response = client.call!"validator1.countTheEntities"("A < bunch ' of innocent >\" bystanders &");
-    assert(response.length == 1);
-    assert(1 == response[0]["ctQuotes"]);
-    assert(1 == response[0]["ctLeftAngleBrackets"]);
-    assert(1 == response[0]["ctRightAngleBrackets"]);
-    assert(1 == response[0]["ctAmpersands"]);
-    assert(1 == response[0]["ctApostrophes"]);
+    real resp2_1 = client.call!("examples.stringecho", real)("123.456");   // IMPLICIT CONVERSION
+    assert(approxEqual(resp2_1, 123.456));
+    
+    int[string] resp3 = client.call!("validator1.countTheEntities", int[string])("A < C ' > 45\" 12 &");
+    assert(1 == resp3["ctQuotes"]);
+    assert(1 == resp3["ctLeftAngleBrackets"]);
+    assert(1 == resp3["ctRightAngleBrackets"]);
+    assert(1 == resp3["ctAmpersands"]);
+    assert(1 == resp3["ctApostrophes"]);
     
     int[string][] arrayOfStructs = [
         ["moe": 1, "larry": 2, "curly": 3],
         ["moe": -98, "larry": 23, "curly": -6]
     ];
-    response = client.call!"validator1.arrayOfStructsTest"(arrayOfStructs);
-    assert(response.length == 1);
-    assert(response[0] == -3);
+    int resp4 = client.call!("validator1.arrayOfStructsTest", int)(arrayOfStructs);
+    assert(resp4 == -3);
 }

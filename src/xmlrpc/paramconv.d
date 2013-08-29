@@ -154,7 +154,6 @@ version (xmlrpc_unittest) unittest
     aa = ["abc": Variant(456), "qwerty": Variant("123.456")];
     vars = [Variant(123), Variant("def"), Variant("789"), Variant(aa), Variant(DateTime(2020, 1, 17, 12, 34, 56))];
     auto p3 = variantArrayToParams!(int, string, float, real[string], DateTime)(vars);
-    writeln(typeid(p3), "    ", p3);
     assert(p3[0] == 123);
     assert(p3[1] == "def");
     assert(p3[2] == 789);
