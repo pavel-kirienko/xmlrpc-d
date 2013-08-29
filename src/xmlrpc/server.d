@@ -6,10 +6,10 @@
 module xmlrpc.server;
 
 import xmlrpc.encoder : encodeResponse;
-import xmlrpc.decoder : decodeCall;
+import xmlrpc.decoder : decodeCall, DecoderException;
 import xmlrpc.data : MethodCallData, MethodResponseData;
 import xmlrpc.paramconv : paramsToVariantArray, variantArrayToParams;
-import xmlrpc.exception : XmlRpcException;
+import xmlrpc.error : XmlRpcException, MethodFaultException, FciFaultCodes, makeFaultValue;
 import std.exception : enforce;
 import std.variant : Variant;
 import std.stdio : writefln;
@@ -34,32 +34,57 @@ class Server
     {
         try
         {
-            auto callData = decodeCall(encodedRequest);
-            
+            // Decode the request
+            MethodCallData callData;
+            try
+                callData = decodeCall(encodedRequest);
+            catch (DecoderException ex)
+                throw new MethodFaultException(ex.msg, FciFaultCodes.serverErrorInvalidXmlRpc);
+            // TODO: proper error codes
             debug (xmlrpc)
                 writefln("server <== %s", callData.toString());
             
-            auto methodPointer = callData.name in methods_;
-            enforce(methodPointer);  // TODO: Proper handler
+            // Find the handler
+            const methodPointer = callData.name in methods_;
+            if (methodPointer is null)
+            {
+                const msg = "Unknown method: " ~ callData.name;
+                throw new MethodFaultException(msg, FciFaultCodes.serverErrorMethodNotFound);
+            }
             
+            // Pass the call into the application
             MethodResponseData responseData;
-            responseData.params = (*methodPointer)(callData.params);
+            try
+                responseData.params = (*methodPointer)(callData.params);
+            catch (MethodFaultException ex)
+                throw ex;
+            catch (Exception ex)
+                throw new MethodFaultException(ex.msg, FciFaultCodes.applicationError);
             
+            // Encode the response
             debug (xmlrpc)
                 writefln("server ==> %s", responseData.toString());
-            
+            return encodeResponse(responseData);
+        }
+        catch (MethodFaultException ex)
+        {
+            MethodResponseData responseData;
+            responseData.fault = true;
+            responseData.params ~= ex.value;
             return encodeResponse(responseData);
         }
         catch (Exception ex)
         {
-            // TODO: add FCI
-            throw ex;
+            MethodResponseData responseData;
+            responseData.fault = true;
+            responseData.params ~= makeFaultValue(ex.msg, FciFaultCodes.serverErrorInternalXmlRpcError);
+            return encodeResponse(responseData);
         }
     }
     
     void addRawMethod(RawMethodHandler handler, string name)
     {
-        enforce(name.length, "Method name must not be empty");
+        enforce(name.length, new XmlRpcException("Method name must not be empty"));
         if (name in methods_)
             throw new MethodExistsException(name);
         methods_[name] = handler;
@@ -91,10 +116,10 @@ private:
 
 class MethodExistsException : XmlRpcException
 {
-    private this(string methodName, string file = __FILE__, size_t line = __LINE__)
+    private this(string methodName)
     {
         this.methodName = methodName;
-        super("Method already exists: " ~ methodName, file, line);
+        super("Method already exists: " ~ methodName);
     }
     
     string methodName;
@@ -124,12 +149,22 @@ RawMethodHandler makeRawMethod(alias method)()
     alias ParameterTypeTuple!method Input;
     alias ReturnType!method Output;
     
+    auto tryVariantArrayToParams(Args...)(Variant[] variants)
+    {
+        try
+            return variantArrayToParams!(Args)(variants);
+        catch (Exception ex)
+            throw new MethodFaultException(ex.msg, FciFaultCodes.serverErrorInvalidMethodParams);
+    }
+    
     return (Variant[] inputVariant)  // Well, the life is getting tough now.
     {
         // Input resolution
         static if (Input.length == 0)
         {
-            enforce(inputVariant.length == 0); // TODO: throw proper exception
+            enforce(inputVariant.length == 0,
+                new MethodFaultException("Method expects no arguments", FciFaultCodes.serverErrorInvalidMethodParams));
+            
             static if (is(Output == void))
             {
                 method();
@@ -141,7 +176,7 @@ RawMethodHandler makeRawMethod(alias method)()
         }
         else
         {
-            Input input = variantArrayToParams!(Input)(inputVariant);
+            Input input = tryVariantArrayToParams!(Input)(inputVariant);
             static if (is(Output == void))
             {
                 method(input);
@@ -189,7 +224,9 @@ version (xmlrpc_unittest) unittest
             const responseString = server.handleRequest(requestString);
             
             auto responseData = decodeResponse(responseString);
-            assert(!responseData.fault); // TODO: throw
+            if (responseData.fault)
+                throw new MethodFaultException(responseData.params[0]);
+            
             static if (ReturnTypes.length == 0)
             {
                 return responseData.params;
@@ -240,5 +277,15 @@ version (xmlrpc_unittest) unittest
      */
     assert(server.removeMethod("nothingGetsNothingGives"));
     assert(!server.removeMethod("nothingGetsNothingGives"));
-    assertThrown(call!"nothingGetsNothingGives"());
+    try
+    {
+        call!"nothingGetsNothingGives"();
+        assert(false);
+    }
+    catch (MethodFaultException ex)
+    {
+        assert(ex.value["faultCode"].get!int() == FciFaultCodes.serverErrorMethodNotFound);
+    }
+    
+    // TODO: check the error handling
 }

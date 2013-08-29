@@ -4,7 +4,7 @@
 
 module xmlrpc.data;
 
-import xmlrpc.exception;
+import xmlrpc.error;
 import std.variant : Variant;
 import std.functional : reduce;
 import std.conv : to;

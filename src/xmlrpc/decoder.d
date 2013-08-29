@@ -5,7 +5,7 @@
 
 module xmlrpc.decoder;
 
-import xmlrpc.exception;
+import xmlrpc.error;
 import xmlrpc.data;
 import std.stdio : writeln;
 import std.xml : Element, Document;

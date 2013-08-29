@@ -9,7 +9,7 @@ import xmlrpc.encoder : encodeCall;
 import xmlrpc.decoder : decodeResponse;
 import xmlrpc.data : MethodCallData, MethodResponseData;
 import xmlrpc.paramconv : paramsToVariantArray, variantArrayToParams;
-import xmlrpc.exception : XmlRpcException;
+import xmlrpc.error : XmlRpcException, MethodFaultException;
 import std.datetime : Duration, dur;
 import std.variant : Variant;
 import std.string : format;
@@ -41,7 +41,14 @@ class Client
             writefln("client <== %s", responseData.toString());
         
         if (throwOnMethodFault && responseData.fault)
-            throw new MethodFaultException(callData, responseData);
+        {
+            Variant faultValue;
+            if (responseData.params.length > 0)
+                faultValue = responseData.params[0];
+            
+            const msg = format("XMLRPC method failure: %s / Call: %s", responseData.toString(), callData.toString());
+            throw new MethodFaultException(faultValue, msg);
+        }
         
         return responseData;
     }
@@ -86,26 +93,6 @@ private:
     
     const string serverUri_;
     Duration timeout_;
-}
-
-class MethodFaultException : XmlRpcException
-{
-    private this(MethodCallData callData, MethodResponseData responseData)
-    {
-        const msg = format("XMLRPC method failure: %s / Call: %s", responseData.toString(), callData.toString());
-        super(msg);
-        
-        if (responseData.params.length > 0)
-            value = responseData.params[0];
-        
-        if (responseData.params.length != 1)
-        {
-            debug (xmlrpc)
-                writefln("Wrong number of values in the method fault response: %s", responseData.toString());
-        }
-    }
-    
-    Variant value;
 }
 
 class TransportException : XmlRpcException

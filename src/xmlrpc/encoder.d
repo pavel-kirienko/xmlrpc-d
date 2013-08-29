@@ -5,7 +5,7 @@
 
 module xmlrpc.encoder;
 
-import xmlrpc.exception;
+import xmlrpc.error;
 import xmlrpc.data;
 import std.xml : Element, Document;
 import std.conv : to;

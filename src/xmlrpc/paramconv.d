@@ -6,7 +6,7 @@
 module xmlrpc.paramconv;
 
 import xmlrpc.data;
-import xmlrpc.exception;
+import xmlrpc.error;
 import std.string : format;
 import std.exception : enforce;
 import std.variant : Variant, VariantException;
