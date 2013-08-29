@@ -98,7 +98,7 @@ class Server
             throw new MethodExistsException(name);
         methods_[name] = MethodInfo(handler, help, signatures);
         debug (xmlrpc)
-            writefln("New method: %s", name);
+            writefln("New method: %s; Help: '%s'; Signatures: %s", name, help, signatures);
     }
     
     nothrow bool removeMethod(string name)
@@ -108,7 +108,39 @@ class Server
     
     void addIntrospectionMethods()
     {
-        // TODO
+        MethodInfo* findMethod(string methodName)
+        {
+            auto infoPtr = methodName in methods_;
+            const msg = "No such method: " ~ methodName;
+            enforce(infoPtr, new MethodFaultException(msg, -1));
+            return infoPtr;
+        }
+        
+        string[] listMethods() { return methods_.keys(); }
+        addMethod!(listMethods, "system.listMethods")(this);
+        
+        string methodHelp(string name) { return findMethod(name).help; }
+        addMethod!(methodHelp, "system.methodHelp")(this);
+        
+        Variant methodSignature(string name)              // This one is tricky
+        {
+            auto signatures = findMethod(name).signatures;
+            if (signatures.length == 0)
+                return Variant("undef");                  // Return type is computed at runtime
+            Variant[] variantSignatures;
+            variantSignatures.length = signatures.length;
+            foreach (signIndex, sign; signatures)
+            {
+                Variant[] variantSign;
+                variantSign.length = sign.length;
+                foreach (typeIndex, type; sign)
+                    variantSign[typeIndex] = Variant(type);
+                variantSignatures[signIndex] = variantSign;
+            }
+            return Variant(variantSignatures); // array of arrays of strings
+        }
+        addMethod!(methodSignature, "system.methodSignature")(this);
+        
         introspecting_ = true;
     }
     
@@ -242,7 +274,10 @@ version (xmlrpc_unittest) unittest
     import xmlrpc.decoder : decodeResponse;
     import std.math : approxEqual;
     import std.typecons : tuple;
+    import std.exception : assertThrown;
+    import std.algorithm : canFind;
     import std.conv : to;
+    import std.stdio : writeln;
     
     /*
      * Issue a request on the server instance
@@ -361,4 +396,33 @@ version (xmlrpc_unittest) unittest
     server.addMethod!throwFciException();
     errcode = methodFaultErrorCode(call!"throwFciException"());
     assert(errcode == 1);
+    
+    /*
+     * Introspection
+     */
+    assert(!server.introspecting);
+    server.addIntrospectionMethods();
+    assert(server.introspecting);
+    
+    // Playing with one method and system.listMethods()
+    assertThrown!MethodExistsException(server.addMethod!swap());
+    server.removeMethod("swap");
+    string[] methods = call!("system.listMethods", string[])();
+    assert(!canFind(methods, "swap"));
+    server.addMethod!swap("Help string for swap", [["int, int", "int", "int"]]);
+    methods = call!("system.listMethods", string[])();
+    assert(canFind(methods, "swap"));
+    
+    // Checking the help strings
+    assert(call!("system.methodHelp", string)("swap") == "Help string for swap");
+    assert(call!("system.methodHelp", string)("ultimateAnswer") == "");
+    errcode = methodFaultErrorCode(call!("system.methodHelp", string)("noSuchMethod"));
+    assert(errcode == -1);
+    
+    // Checking the signatures
+    string[][] signatures = call!("system.methodSignature", string[][])("swap");    // Return type is string[][]
+    assert(signatures == [["int, int", "int", "int"]]);
+    
+    string noSignature = call!("system.methodSignature", string)("ultimateAnswer"); // Return type is string
+    assert(noSignature == "undef");
 }
