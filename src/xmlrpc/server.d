@@ -13,7 +13,7 @@ import xmlrpc.error : XmlRpcException, MethodFaultException, FciFaultCodes, make
 import std.exception : enforce;
 import std.variant : Variant;
 import std.string : format;
-import std.stdio : writefln;
+import std.stdio : writefln, write;
 import std.traits : isCallable, ParameterTypeTuple, ReturnType;
 
 alias void delegate(string) LogHandler;
@@ -24,7 +24,7 @@ class Server
     this(LogHandler logHandler = null, bool addIntrospectionMethods = false)
     {
         if (!logHandler)
-            logHandler = (string msg) { import std.cstream; derr.write(msg ~ "\n"); };
+            logHandler = (string msg) { write(msg); };
         logHandler_ = logHandler;
         if (addIntrospectionMethods)
             this.addIntrospectionMethods();
@@ -74,6 +74,7 @@ class Server
         }
         catch (MethodFaultException ex)
         {
+            tryLog("Method fault: %s", ex.msg);
             MethodResponseData responseData;
             responseData.fault = true;
             responseData.params ~= ex.value;
@@ -81,6 +82,7 @@ class Server
         }
         catch (Exception ex)
         {
+            tryLog("Server exception: %s", ex);
             MethodResponseData responseData;
             responseData.fault = true;
             responseData.params ~= makeFaultValue(ex.msg, FciFaultCodes.serverErrorInternalXmlRpcError);
@@ -98,7 +100,7 @@ class Server
             writefln("New method: %s", name);
     }
     
-    bool removeMethod(string name)
+    nothrow bool removeMethod(string name)
     {
         return methods_.remove(name);
     }
@@ -110,11 +112,27 @@ class Server
     }
     
     @property void logHandler(LogHandler lh) { logHandler_ = lh; }
-    @property LogHandler logHandler() { return logHandler_; }
+    @property nothrow LogHandler logHandler() { return logHandler_; }
     
-    @property bool introspecting() const { return introspecting_; }
+    @property nothrow bool introspecting() const { return introspecting_; }
     
 private:
+    nothrow void tryLog(S...)(string fmt, S s)
+    {
+        if (logHandler_ is null)
+            return;
+        try
+            logHandler_(format(fmt, s) ~ "\n");
+        catch (Exception ex)
+        {
+            debug (xmlrpc)
+            {
+                try writefln("Log handler exception: %s", ex);
+                catch (Exception) { }
+            }
+        }
+    }
+    
     LogHandler logHandler_;
     bool introspecting_;
     RawMethodHandler[string] methods_;
