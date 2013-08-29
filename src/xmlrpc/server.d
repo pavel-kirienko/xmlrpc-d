@@ -6,15 +6,15 @@
 module xmlrpc.server;
 
 import xmlrpc.encoder : encodeResponse;
-import xmlrpc.decoder : decodeCall, DecoderException;
+import xmlrpc.decoder : decodeCall;
 import xmlrpc.data : MethodCallData, MethodResponseData;
 import xmlrpc.paramconv : paramsToVariantArray, variantArrayToParams;
 import xmlrpc.error : XmlRpcException, MethodFaultException, FciFaultCodes, makeFaultValue;
 import std.exception : enforce;
 import std.variant : Variant;
+import std.string : format;
 import std.stdio : writefln;
 import std.traits : isCallable, ParameterTypeTuple, ReturnType;
-import std.typecons : Tuple, tuple;
 
 alias void delegate(string) LogHandler;
 alias Variant[] delegate(Variant[]) RawMethodHandler;
@@ -38,9 +38,8 @@ class Server
             MethodCallData callData;
             try
                 callData = decodeCall(encodedRequest);
-            catch (DecoderException ex)
+            catch (Exception ex)
                 throw new MethodFaultException(ex.msg, FciFaultCodes.serverErrorInvalidXmlRpc);
-            // TODO: proper error codes
             debug (xmlrpc)
                 writefln("server <== %s", callData.toString());
             
@@ -55,11 +54,18 @@ class Server
             // Pass the call into the application
             MethodResponseData responseData;
             try
+            {
                 responseData.params = (*methodPointer)(callData.params);
+            }
             catch (MethodFaultException ex)
+            {
                 throw ex;
+            }
             catch (Exception ex)
-                throw new MethodFaultException(ex.msg, FciFaultCodes.applicationError);
+            {
+                const msg = format("%s:%s: %s: %s", ex.file, ex.line, typeid(ex), ex.msg);
+                throw new MethodFaultException(msg, FciFaultCodes.applicationError);
+            }
             
             // Encode the response
             debug (xmlrpc)
@@ -208,7 +214,8 @@ version (xmlrpc_unittest) unittest
     import xmlrpc.encoder : encodeCall;
     import xmlrpc.decoder : decodeResponse;
     import std.math : approxEqual;
-    import std.exception : assertThrown;
+    import std.typecons : tuple;
+    import std.conv : to;
     
     /*
      * Issue a request on the server instance
@@ -229,7 +236,8 @@ version (xmlrpc_unittest) unittest
             
             static if (ReturnTypes.length == 0)
             {
-                return responseData.params;
+                assert(responseData.params.length == 0);
+                return;
             }
             else
             {
@@ -252,9 +260,9 @@ version (xmlrpc_unittest) unittest
     assert(resp1[1] == 123);
     
     // Returns scalar
-    auto doWierdThing(real a, real b, real c) { return a * b + c; }
-    server.addMethod!doWierdThing();
-    double resp2 = call!("doWierdThing", double)(1.2, 3.4, 5.6);
+    auto doWeirdThing(real a, real b, real c) { return a * b + c; }
+    server.addMethod!doWeirdThing();
+    double resp2 = call!("doWeirdThing", double)(1.2, 3.4, 5.6);
     assert(approxEqual(resp2, 9.68));
     
     // Takes nothing
@@ -277,15 +285,53 @@ version (xmlrpc_unittest) unittest
      */
     assert(server.removeMethod("nothingGetsNothingGives"));
     assert(!server.removeMethod("nothingGetsNothingGives"));
-    try
+    
+    /*
+     * Error handling
+     */
+    int methodFaultErrorCode(Expr, size_t line = __LINE__)(lazy Expr expression)
     {
-        call!"nothingGetsNothingGives"();
-        assert(false);
-    }
-    catch (MethodFaultException ex)
-    {
-        assert(ex.value["faultCode"].get!int() == FciFaultCodes.serverErrorMethodNotFound);
+        try
+            expression();
+        catch (MethodFaultException ex)
+            return ex.value["faultCode"].get!int();
+        assert(false, to!string(line));
     }
     
-    // TODO: check the error handling
+    // Non-existent method
+    auto errcode = methodFaultErrorCode(call!"nothingGetsNothingGives"());
+    assert(errcode == FciFaultCodes.serverErrorMethodNotFound);
+    
+    // Wrong parameter types, non-convertible to int
+    errcode = methodFaultErrorCode(call!"swap"("ck", "fu"));
+    assert(errcode == FciFaultCodes.serverErrorInvalidMethodParams);
+    
+    // Wrong number of arguments
+    errcode = methodFaultErrorCode(call!"swap"("ck", "fu", "give"));
+    assert(errcode == FciFaultCodes.serverErrorInvalidMethodParams);
+    
+    errcode = methodFaultErrorCode(call!"swap"());
+    assert(errcode == FciFaultCodes.serverErrorInvalidMethodParams);
+    
+    errcode = methodFaultErrorCode(call!("ultimateAnswer", int)(123, 456));
+    assert(errcode == FciFaultCodes.serverErrorInvalidMethodParams);
+    
+    // Malformed XML
+    auto responseString = server.handleRequest("I am broken XML. <phew>");
+    auto responseData = decodeResponse(responseString);
+    assert(responseData.fault);
+    errcode = responseData.params[0]["faultCode"].get!int();
+    assert(errcode == FciFaultCodes.serverErrorInvalidXmlRpc);
+    
+    // Application error
+    void throwWeirdException() { throw new Exception("Come break me down bury me bury me"); }
+    server.addMethod!throwWeirdException();
+    errcode = methodFaultErrorCode(call!"throwWeirdException"());
+    assert(errcode == FciFaultCodes.applicationError, to!string(errcode));
+    
+    // Application throws an FCI error
+    void throwFciException() { throw new MethodFaultException("Hi!", 1); }
+    server.addMethod!throwFciException();
+    errcode = methodFaultErrorCode(call!"throwFciException"());
+    assert(errcode == 1);
 }
