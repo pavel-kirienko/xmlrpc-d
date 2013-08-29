@@ -137,7 +137,7 @@ Variant decodeStructValue(in Element storage)
         if (member.tag.name != "member")
         {
             debug (xmlrpc)
-                writeln("Invalid struct subelement: ", member.tag.name);
+                writeln("Decoder: Invalid struct subelement: ", member.tag.name);
             continue;
         }
         const nameNode = find(member, "name");
@@ -158,7 +158,7 @@ Variant decodeArrayValue(in Element storage)
         if (value.tag.name != "value")
         {
             debug (xmlrpc)
-                writeln("Invalid array member tag: ", value.tag.name);
+                writeln("Decoder: Invalid array member tag: ", value.tag.name);
             continue;
         }
         result ~= decodeValue(value);
@@ -188,7 +188,7 @@ Variant decodePrimitiveValue(in Element storage, string type)
             debug (xmlrpc)
             {
                 if (data != "0" && data != "1")
-                    writeln("Invalid literal for boolean: " ~ data);
+                    writeln("Decoder: Invalid literal for boolean: " ~ data);
             }
             return Variant(to!int(data) != 0);            // Sloppy conversion
         

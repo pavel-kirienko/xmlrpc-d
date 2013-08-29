@@ -6,12 +6,28 @@
 module xmlrpc.paramconv;
 
 import xmlrpc.data;
-import std.variant : Variant;
+import xmlrpc.exception;
+import std.string : format;
+import std.exception : enforce;
+import std.variant : Variant, VariantException;
 import std.range : isForwardRange;
-import std.conv : to;
-import std.traits : isAssociativeArray, isImplicitlyConvertible, KeyType, isSomeString, isScalarType, Unqual;
+import std.conv : to, ConvException;
+import std.typecons : Tuple;
+import std.stdio : writeln;
+import std.traits : isAssociativeArray, isArray, isImplicitlyConvertible, KeyType, ValueType, isSomeString,
+                    isScalarType, Unqual;
 
-package Variant[] paramsToVariantArray(Args...)(Args args)
+class ParameterConversionException : XmlRpcException
+{
+    private this(string msg, string file = __FILE__, size_t line = __LINE__)
+    {
+        super(msg, file, line, next);
+    }
+}
+
+package:
+
+Variant[] paramsToVariantArray(Args...)(Args args)
 {
     Variant[] result;
     foreach (a; args)
@@ -19,7 +35,74 @@ package Variant[] paramsToVariantArray(Args...)(Args args)
     return result;
 }
 
-private Variant paramToVariant(Arg)(Arg arg)
+ParamTuple!(Args) variantArrayToParams(Args...)(Variant[] variants)
+{
+    enforce(Args.length == variants.length,
+        new ParameterConversionException(format("Wrong number of arguments: expected %s, got %s)",
+                                                Args.length, variants.length)));
+    
+    static if (Args.length == 1)  // Special case
+    {
+        return variantToParam!(Args[0])(variants[0]);
+    }
+    else
+    {
+        typeof(return) returnValue;
+        foreach (i, ref item; returnValue)
+            item = variantToParam!(typeof(returnValue[i]))(variants[i]);
+        return returnValue;
+    }
+}
+
+private:
+
+template ParamTuple(T...)
+{
+    static if( T.length == 1 )
+        alias T[0] ParamTuple;
+    else
+        alias Tuple!(T) ParamTuple;
+}
+
+Arg variantToParam(Arg)(Variant var)
+{
+    static if (is(Arg : Variant))
+    {
+        return var;
+    }
+    else static if (isSomeString!Arg)
+    {
+        return to!Arg(var);
+    }
+    else static if (isArray!Arg)
+    {
+        Arg array;
+        foreach (ref Variant item; var)
+            array ~= variantToParam!(typeof(array[0]))(item);
+        return array;
+    }
+    else static if (isAssociativeArray!Arg)
+    {
+        static assert(isImplicitlyConvertible!(KeyType!Arg, const(string)) ||
+                      "Associative array key type must be implicitly convertible to string");
+        Arg assocArray;
+        // intermediate array is required because iterating over the Variant(Value[Key]) does not work
+        auto intermediate = var.get!(Variant[string])();
+        foreach (key, ref value; intermediate)
+            assocArray[key] = variantToParam!(ValueType!Arg)(value);
+        return assocArray;
+    }
+    else static if (is(typeof(var.coerce!Arg())))  // Try to coerce only if the type is coercible
+    {
+        return var.coerce!Arg();
+    }
+    else
+    {
+        return var.get!Arg();                      // Exact match is the last line of defence
+    }
+}
+
+Variant paramToVariant(Arg)(Arg arg)
 {
     static if (isImplicitlyConvertible!(Arg, Variant))
     {
@@ -52,7 +135,7 @@ private Variant paramToVariant(Arg)(Arg arg)
     }
     else static if (isScalarType!Arg)                  // NOTE: Get rid of type qualifiers
     {
-        return Variant(cast(Unqual!Arg)arg);
+        return Variant(to!(Unqual!Arg)(arg));
     }
     else
     {
@@ -60,14 +143,50 @@ private Variant paramToVariant(Arg)(Arg arg)
     }
 }
 
+// From Variant[]
 version (xmlrpc_unittest) unittest
 {
-    import std.stdio;
+    import std.exception;
+    import std.datetime : DateTime;
+    
+    Variant[] vars = [Variant([Variant(123), Variant(456)])];
+    auto p1 = variantArrayToParams!(int[])(vars);
+    assert(p1 == [123, 456]);
+    
+    Variant[string] aa = ["abc": Variant(456)];
+    vars = [Variant(aa)];
+    auto p2 = variantArrayToParams!(int[string])(vars);
+    assert(p2["abc"] == 456);
+    
+    // Multiple arguments, implicit string to float conversion
+    aa = ["abc": Variant(456), "qwerty": Variant("123.456")];
+    vars = [Variant(123), Variant("def"), Variant("789"), Variant(aa), Variant(DateTime(2020, 1, 17, 12, 34, 56))];
+    auto p3 = variantArrayToParams!(int, string, float, real[string], DateTime)(vars);
+    writeln(typeid(p3), "    ", p3);
+    assert(p3[0] == 123);
+    assert(p3[1] == "def");
+    assert(p3[2] == 789);
+    assert(p3[3]["abc"] == 456);
+    assert(p3[3]["qwerty"] == 123.456);
+    assert(p3[4] == DateTime(2020, 1, 17, 12, 34, 56));
+    
+    // Non-parseable strings
+    vars = [Variant("nonparseable"), Variant("*+j")];
+    assertThrown!ConvException(variantArrayToParams!(int, float)(vars));
+    
+    // Type mismatch
+    assertThrown!ParameterConversionException(variantArrayToParams!(int)(vars));
+    assertThrown!VariantException(variantArrayToParams!(int[string], float[])(vars));
+    
+    // Compilation failure
+    static assert(!is(typeof(variantArrayToParams!(string[int])(vars)))); // AA key type
+}
+
+// To Variant[]
+version (xmlrpc_unittest) unittest
+{
     import std.exception;
     
-    /*
-     * Primitives
-     */
     assert(paramToVariant(123) == 123);
     
     Variant converted = paramToVariant(["test": [cast(immutable)456, cast(const)789]]);
