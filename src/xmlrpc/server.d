@@ -44,18 +44,19 @@ class Server
                 writefln("server <== %s", callData.toString());
             
             // Find the handler
-            const methodPointer = callData.name in methods_;
-            if (methodPointer is null)
+            const methodInfoPtr = callData.name in methods_;
+            if (methodInfoPtr is null)
             {
                 const msg = "Unknown method: " ~ callData.name;
                 throw new MethodFaultException(msg, FciFaultCodes.serverErrorMethodNotFound);
             }
+            enforce(methodInfoPtr.handler != null, new XmlRpcException("Impossible happens!"));
             
             // Pass the call into the application
             MethodResponseData responseData;
             try
             {
-                responseData.params = (*methodPointer)(callData.params);
+                responseData.params = methodInfoPtr.handler(callData.params);
             }
             catch (MethodFaultException ex)
             {
@@ -90,12 +91,12 @@ class Server
         }
     }
     
-    void addRawMethod(RawMethodHandler handler, string name)
+    void addRawMethod(RawMethodHandler handler, string name, string help = "", string[][] signatures = null)
     {
         enforce(name.length, new XmlRpcException("Method name must not be empty"));
         if (name in methods_)
             throw new MethodExistsException(name);
-        methods_[name] = handler;
+        methods_[name] = MethodInfo(handler, help, signatures);
         debug (xmlrpc)
             writefln("New method: %s", name);
     }
@@ -133,9 +134,16 @@ private:
         }
     }
     
+    static struct MethodInfo
+    {
+        RawMethodHandler handler;
+        string help;
+        string[][] signatures;
+    }
+    
     LogHandler logHandler_;
     bool introspecting_;
-    RawMethodHandler[string] methods_;
+    MethodInfo[string] methods_;
 }
 
 class MethodExistsException : XmlRpcException
@@ -153,11 +161,12 @@ class MethodExistsException : XmlRpcException
  * We can't use member function here because that doesn't work with local handlers:
  * Error: template instance addMethod!(method) cannot use local 'method' as parameter to non-global template <...>
  */
-void addMethod(alias method, string name = __traits(identifier, method))(Server server)
+void addMethod(alias method, string name = __traits(identifier, method))(Server server, string help = "",
+                                                                         string[][] signatures = null)
 {
     static assert(name.length, "Method name must not be empty");
     auto handler = makeRawMethod!method();
-    server.addRawMethod(handler, name);
+    server.addRawMethod(handler, name, help, signatures);
 }
 
 private:
