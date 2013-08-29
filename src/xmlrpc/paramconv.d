@@ -35,7 +35,7 @@ Variant[] paramsToVariantArray(Args...)(Args args)
     return result;
 }
 
-ParamTuple!(Args) variantArrayToParams(Args...)(Variant[] variants)
+auto variantArrayToParams(Args...)(Variant[] variants)
 {
     enforce(Args.length == variants.length,
         new ParameterConversionException(format("Wrong number of arguments: expected %s, got %s)",
@@ -47,7 +47,7 @@ ParamTuple!(Args) variantArrayToParams(Args...)(Variant[] variants)
     }
     else
     {
-        typeof(return) returnValue;
+        Tuple!(Args) returnValue;
         foreach (i, ref item; returnValue)
             item = variantToParam!(typeof(returnValue[i]))(variants[i]);
         return returnValue;
@@ -55,14 +55,6 @@ ParamTuple!(Args) variantArrayToParams(Args...)(Variant[] variants)
 }
 
 private:
-
-template ParamTuple(T...)
-{
-    static if( T.length == 1 )
-        alias T[0] ParamTuple;
-    else
-        alias Tuple!(T) ParamTuple;
-}
 
 Arg variantToParam(Arg)(Variant var)
 {
