@@ -26,6 +26,9 @@ class Server
         if (!logHandler)
             logHandler = (string msg) { write(msg); };
         logHandler_ = logHandler;
+        
+        addSystemMethods();
+        
         if (addIntrospectionMethods)
             this.addIntrospectionMethods();
     }
@@ -164,6 +167,25 @@ private:
                 catch (Exception) { }
             }
         }
+    }
+    
+    void addSystemMethods()
+    {
+        string[string][string] getCapabilities()
+        {
+            string[string][string] capabilities;
+            void add(string name, string specUrl, string specVersion)
+            {
+                capabilities[name] = ["specUrl": specUrl, "specVersion": specVersion];
+            }
+            add("xmlrpc", "http://www.xmlrpc.com/spec", "1");
+            if (introspecting_)
+                add("introspection", "http://phpxmlrpc.sourceforge.net/doc-2/ch10.html", "2");
+            return capabilities;
+        }
+        addMethod!(getCapabilities, "system.getCapabilities")(this);
+        
+        // TODO: multicall
     }
     
     static struct MethodInfo
@@ -400,9 +422,19 @@ version (xmlrpc_unittest) unittest
     /*
      * Introspection
      */
+    auto capabilities = call!("system.getCapabilities", string[string][string])();
+    assert(capabilities.length == 1);
+    assert(capabilities["xmlrpc"] == ["specUrl": "http://www.xmlrpc.com/spec", "specVersion": "1"]);
+    
     assert(!server.introspecting);
     server.addIntrospectionMethods();
     assert(server.introspecting);
+    
+    capabilities = call!("system.getCapabilities", string[string][string])();
+    assert(capabilities.length == 2);
+    assert(capabilities["xmlrpc"] == ["specUrl": "http://www.xmlrpc.com/spec", "specVersion": "1"]);
+    assert(capabilities["introspection"] ==
+           ["specUrl": "http://phpxmlrpc.sourceforge.net/doc-2/ch10.html", "specVersion": "2"]);
     
     // Playing with one method and system.listMethods()
     assertThrown!MethodExistsException(server.addMethod!swap());
