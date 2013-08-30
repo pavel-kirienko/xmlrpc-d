@@ -17,16 +17,16 @@ import std.conv : to;
 import std.stdio : writefln, write;
 import std.traits : isCallable, ParameterTypeTuple, ReturnType;
 
-alias void delegate(string) LogHandler;
+alias void delegate(string) ErrorLogHandler;
 alias Variant[] delegate(Variant[]) RawMethodHandler;
 
 class Server
 {
-    this(LogHandler logHandler = null, bool addIntrospectionMethods = false)
+    this(ErrorLogHandler errorLogHandler = null, bool addIntrospectionMethods = false)
     {
-        if (!logHandler)
-            logHandler = (string msg) { write(msg); };
-        logHandler_ = logHandler;
+        if (!errorLogHandler)
+            errorLogHandler = (string msg) { write(msg); };
+        errorLogHandler_ = errorLogHandler;
         addSystemMethods(this);
     }
     
@@ -52,13 +52,13 @@ class Server
         }
         catch (MethodFaultException ex)
         {
-            tryLog("Method fault: %s", ex.msg);
+            tryLogError("Method fault: %s", ex.msg);
             auto responseData = makeMethodFaultResponse(ex);
             return encodeResponse(responseData);
         }
         catch (Exception ex)
         {
-            tryLog("Server exception: %s", ex);
+            tryLogError("Server exception: %s", ex);
             MethodResponseData responseData;
             responseData.fault = true;
             responseData.params ~= makeFaultValue(ex.msg, FciFaultCodes.serverErrorInternalXmlRpcError);
@@ -81,8 +81,8 @@ class Server
         return methods_.remove(name);
     }
     
-    @property void logHandler(LogHandler lh) { logHandler_ = lh; }
-    @property nothrow LogHandler logHandler() { return logHandler_; }
+    @property void errorLogHandler(ErrorLogHandler lh) { errorLogHandler_ = lh; }
+    @property nothrow ErrorLogHandler errorLogHandler() { return errorLogHandler_; }
     
 private:
     MethodResponseData callMethod(MethodCallData callData)
@@ -112,12 +112,12 @@ private:
         }
     }
     
-    nothrow void tryLog(S...)(string fmt, S s)
+    nothrow void tryLogError(S...)(string fmt, S s)
     {
-        if (logHandler_ is null)
+        if (errorLogHandler_ is null)
             return;
         try
-            logHandler_(format(fmt, s) ~ "\n");
+            errorLogHandler_(format(fmt, s) ~ "\n");
         catch (Exception ex)
         {
             debug (xmlrpc)
@@ -135,7 +135,7 @@ private:
         string[][] signatures;
     }
     
-    LogHandler logHandler_;
+    ErrorLogHandler errorLogHandler_;
     MethodInfo[string] methods_;
 }
 
