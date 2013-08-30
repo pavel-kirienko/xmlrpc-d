@@ -11,8 +11,9 @@ import xmlrpc.data : MethodCallData, MethodResponseData;
 import xmlrpc.paramconv : paramsToVariantArray, variantArrayToParams;
 import xmlrpc.error : XmlRpcException, MethodFaultException, FciFaultCodes, makeFaultValue;
 import std.exception : enforce;
-import std.variant : Variant;
+import std.variant : Variant, VariantException;
 import std.string : format;
+import std.conv : to;
 import std.stdio : writefln, write;
 import std.traits : isCallable, ParameterTypeTuple, ReturnType;
 
@@ -52,9 +53,7 @@ class Server
         catch (MethodFaultException ex)
         {
             tryLog("Method fault: %s", ex.msg);
-            MethodResponseData responseData;
-            responseData.fault = true;
-            responseData.params ~= ex.value;
+            auto responseData = makeMethodFaultResponse(ex);
             return encodeResponse(responseData);
         }
         catch (Exception ex)
@@ -88,22 +87,23 @@ class Server
 private:
     MethodResponseData callMethod(MethodCallData callData)
     {
-        const methodInfoPtr = callData.name in methods_;
-        if (methodInfoPtr is null)
-        {
-            const msg = "Unknown method: " ~ callData.name;
-            throw new MethodFaultException(msg, FciFaultCodes.serverErrorMethodNotFound);
-        }
-        enforce(methodInfoPtr.handler != null, new XmlRpcException("Impossible happens!"));
         try
         {
+            const methodInfoPtr = callData.name in methods_;
+            if (methodInfoPtr is null)
+            {
+                const msg = "Unknown method: " ~ callData.name;
+                throw new MethodFaultException(msg, FciFaultCodes.serverErrorMethodNotFound);
+            }
+            enforce(methodInfoPtr.handler != null, new XmlRpcException("Impossible happens!"));
+            
             MethodResponseData responseData;
             responseData.params = methodInfoPtr.handler(callData.params);
             return responseData;
         }
         catch (MethodFaultException ex)
         {
-            throw ex;
+            throw ex;  // Propagate further, no conversion required
         }
         catch (Exception ex)
         {
@@ -229,6 +229,14 @@ RawMethodHandler makeRawMethod(alias method)()
     };
 }
 
+MethodResponseData makeMethodFaultResponse(MethodFaultException ex)
+{
+    MethodResponseData responseData;
+    responseData.fault = true;
+    responseData.params ~= ex.value;
+    return responseData;
+}
+
 void addSystemMethods(Server server)
 {
     Server.MethodInfo* findMethod(string methodName)
@@ -240,10 +248,8 @@ void addSystemMethods(Server server)
     }
     
     string[] listMethods() { return server.methods_.keys(); }
-    server.addMethod!(listMethods, "system.listMethods")();
     
     string methodHelp(string name) { return findMethod(name).help; }
-    server.addMethod!(methodHelp, "system.methodHelp")();
     
     Variant methodSignature(string name)              // This one is tricky
     {
@@ -262,7 +268,6 @@ void addSystemMethods(Server server)
         }
         return Variant(variantSignatures); // array of arrays of strings
     }
-    server.addMethod!(methodSignature, "system.methodSignature")();
     
     string[string][string] getCapabilities()
     {
@@ -273,11 +278,54 @@ void addSystemMethods(Server server)
         }
         cap("xmlrpc", "http://www.xmlrpc.com/spec", "1");
         cap("introspection", "http://phpxmlrpc.sourceforge.net/doc-2/ch10.html", "2");
+        cap("system.multicall", "http://www.xmlrpc.com/discuss/msgReader$1208", "1");
         return capabilities;
     }
-    server.addMethod!(getCapabilities, "system.getCapabilities")();
     
-    // TODO: multicall
+    Variant[] multicall(Variant[] calls)
+    {
+        MethodResponseData invoke(Variant callParams)
+        {
+            MethodCallData callData;
+            try
+            {
+                callData.name = callParams["methodName"].get!string();
+                callData.params = callParams["params"].get!(Variant[])();
+            }
+            catch (VariantException ex)
+                throw new MethodFaultException(ex.msg, FciFaultCodes.serverErrorInvalidMethodParams);
+            
+            if (callData.name == "system.multicall")
+                throw new MethodFaultException("Recursive system.multicall is forbidden", -1);
+            
+            return server.callMethod(callData);
+        }
+        Variant[] responses;
+        responses.length = calls.length;
+        foreach (idx, call; calls)
+        {
+            MethodResponseData response;
+            try
+                response = invoke(call);
+            catch (MethodFaultException ex)
+                response = makeMethodFaultResponse(ex);
+            
+            if (response.fault)
+            {
+                assert(response.params.length == 1, "Invalid fault from server: " ~ to!string(response.params));
+                responses[idx] = response.params[0];
+            }
+            else
+                responses[idx] = response.params;
+        }
+        return responses;
+    }
+    
+    server.addMethod!(listMethods, "system.listMethods")();
+    server.addMethod!(methodHelp, "system.methodHelp")();
+    server.addMethod!(methodSignature, "system.methodSignature")();
+    server.addMethod!(getCapabilities, "system.getCapabilities")();
+    server.addMethod!(multicall, "system.multicall")();
 }
 
 version (xmlrpc_unittest) unittest
@@ -288,7 +336,6 @@ version (xmlrpc_unittest) unittest
     import std.typecons : tuple;
     import std.exception : assertThrown;
     import std.algorithm : canFind;
-    import std.conv : to;
     import std.stdio : writeln;
     
     /*
@@ -413,10 +460,12 @@ version (xmlrpc_unittest) unittest
      * Introspection
      */
     auto capabilities = call!("system.getCapabilities", string[string][string])();
-    assert(capabilities.length == 2);
+    assert(capabilities.length == 3);
     assert(capabilities["xmlrpc"] == ["specUrl": "http://www.xmlrpc.com/spec", "specVersion": "1"]);
     assert(capabilities["introspection"] ==
            ["specUrl": "http://phpxmlrpc.sourceforge.net/doc-2/ch10.html", "specVersion": "2"]);
+    assert(capabilities["system.multicall"] ==
+           ["specUrl": "http://www.xmlrpc.com/discuss/msgReader$1208", "specVersion": "1"]);
     
     // Playing with one method and system.listMethods()
     assertThrown!MethodExistsException(server.addMethod!swap());
@@ -439,4 +488,49 @@ version (xmlrpc_unittest) unittest
     
     string noSignature = call!("system.methodSignature", string)("ultimateAnswer"); // Return type is string
     assert(noSignature == "undef");
+    
+    /*
+     * Multicall
+     */
+    Variant[] multicallArgs;
+    void addCall(Args...)(string method, Args args)
+    {
+        auto call = Variant([
+            "methodName": Variant(method),
+            "params": Variant(paramsToVariantArray(args))
+        ]);
+        multicallArgs ~= call;
+    }
+    addCall("swap", 123, 456);
+    addCall("ultimateAnswer");
+    addCall("ultimateAnswer", "unexpected");
+    addCall("system.multicall");    // will fail
+    addCall("throwWeirdException");
+    
+    Variant[] multicallResponses = call!("system.multicall", Variant[])(multicallArgs);
+    auto fetchMulticallResponse(Types...)()
+    {
+        auto v = multicallResponses[0].get!(Variant[])();
+        multicallResponses = multicallResponses[1..$];
+        return variantArrayToParams!(Types)(v);
+    }
+    auto assertMulticallFault(int errorCode)
+    {
+        auto v = multicallResponses[0];
+        multicallResponses = multicallResponses[1..$];
+        writeln("Mulitcall fault: ", v["faultString"].get!string());
+        assert(errorCode == v["faultCode"].get!int());
+    }
+    // swap
+    auto mcresp = fetchMulticallResponse!(int, int)();
+    assert(mcresp[0] == 456);
+    assert(mcresp[1] == 123);
+    // ultimateAnswer
+    assert(fetchMulticallResponse!(int)() == 42);
+    // ultimateAnswer - unepected arg
+    assertMulticallFault(FciFaultCodes.serverErrorInvalidMethodParams);
+    // system.multicall
+    assertMulticallFault(-1);
+    // throwWeirdException
+    assertMulticallFault(FciFaultCodes.applicationError);
 }
