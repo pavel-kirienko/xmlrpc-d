@@ -533,4 +533,8 @@ version (xmlrpc_unittest) unittest
     assertMulticallFault(-1);
     // throwWeirdException
     assertMulticallFault(FciFaultCodes.applicationError);
+    
+    // Make sure the multicall will not fail on empty request
+    Variant[] emptyMulticallArgs;
+    assert(call!("system.multicall", Variant[])(emptyMulticallArgs).length == 0);
 }
