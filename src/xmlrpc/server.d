@@ -26,11 +26,7 @@ class Server
         if (!logHandler)
             logHandler = (string msg) { write(msg); };
         logHandler_ = logHandler;
-        
-        addSystemMethods();
-        
-        if (addIntrospectionMethods)
-            this.addIntrospectionMethods();
+        addSystemMethods(this);
     }
     
     string handleRequest(string encodedRequest)
@@ -46,30 +42,7 @@ class Server
             debug (xmlrpc)
                 writefln("server <== %s", callData.toString());
             
-            // Find the handler
-            const methodInfoPtr = callData.name in methods_;
-            if (methodInfoPtr is null)
-            {
-                const msg = "Unknown method: " ~ callData.name;
-                throw new MethodFaultException(msg, FciFaultCodes.serverErrorMethodNotFound);
-            }
-            enforce(methodInfoPtr.handler != null, new XmlRpcException("Impossible happens!"));
-            
-            // Pass the call into the application
-            MethodResponseData responseData;
-            try
-            {
-                responseData.params = methodInfoPtr.handler(callData.params);
-            }
-            catch (MethodFaultException ex)
-            {
-                throw ex;
-            }
-            catch (Exception ex)
-            {
-                const msg = format("%s:%s: %s: %s", ex.file, ex.line, typeid(ex), ex.msg);
-                throw new MethodFaultException(msg, FciFaultCodes.applicationError);
-            }
+            MethodResponseData responseData = callMethod(callData);
             
             // Encode the response
             debug (xmlrpc)
@@ -109,50 +82,36 @@ class Server
         return methods_.remove(name);
     }
     
-    void addIntrospectionMethods()
-    {
-        MethodInfo* findMethod(string methodName)
-        {
-            auto infoPtr = methodName in methods_;
-            const msg = "No such method: " ~ methodName;
-            enforce(infoPtr, new MethodFaultException(msg, -1));
-            return infoPtr;
-        }
-        
-        string[] listMethods() { return methods_.keys(); }
-        addMethod!(listMethods, "system.listMethods")(this);
-        
-        string methodHelp(string name) { return findMethod(name).help; }
-        addMethod!(methodHelp, "system.methodHelp")(this);
-        
-        Variant methodSignature(string name)              // This one is tricky
-        {
-            auto signatures = findMethod(name).signatures;
-            if (signatures.length == 0)
-                return Variant("undef");                  // Return type is computed at runtime
-            Variant[] variantSignatures;
-            variantSignatures.length = signatures.length;
-            foreach (signIndex, sign; signatures)
-            {
-                Variant[] variantSign;
-                variantSign.length = sign.length;
-                foreach (typeIndex, type; sign)
-                    variantSign[typeIndex] = Variant(type);
-                variantSignatures[signIndex] = variantSign;
-            }
-            return Variant(variantSignatures); // array of arrays of strings
-        }
-        addMethod!(methodSignature, "system.methodSignature")(this);
-        
-        introspecting_ = true;
-    }
-    
     @property void logHandler(LogHandler lh) { logHandler_ = lh; }
     @property nothrow LogHandler logHandler() { return logHandler_; }
     
-    @property nothrow bool introspecting() const { return introspecting_; }
-    
 private:
+    MethodResponseData callMethod(MethodCallData callData)
+    {
+        const methodInfoPtr = callData.name in methods_;
+        if (methodInfoPtr is null)
+        {
+            const msg = "Unknown method: " ~ callData.name;
+            throw new MethodFaultException(msg, FciFaultCodes.serverErrorMethodNotFound);
+        }
+        enforce(methodInfoPtr.handler != null, new XmlRpcException("Impossible happens!"));
+        try
+        {
+            MethodResponseData responseData;
+            responseData.params = methodInfoPtr.handler(callData.params);
+            return responseData;
+        }
+        catch (MethodFaultException ex)
+        {
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            const msg = format("%s:%s: %s: %s", ex.file, ex.line, typeid(ex), ex.msg);
+            throw new MethodFaultException(msg, FciFaultCodes.applicationError);
+        }
+    }
+    
     nothrow void tryLog(S...)(string fmt, S s)
     {
         if (logHandler_ is null)
@@ -169,25 +128,6 @@ private:
         }
     }
     
-    void addSystemMethods()
-    {
-        string[string][string] getCapabilities()
-        {
-            string[string][string] capabilities;
-            void add(string name, string specUrl, string specVersion)
-            {
-                capabilities[name] = ["specUrl": specUrl, "specVersion": specVersion];
-            }
-            add("xmlrpc", "http://www.xmlrpc.com/spec", "1");
-            if (introspecting_)
-                add("introspection", "http://phpxmlrpc.sourceforge.net/doc-2/ch10.html", "2");
-            return capabilities;
-        }
-        addMethod!(getCapabilities, "system.getCapabilities")(this);
-        
-        // TODO: multicall
-    }
-    
     static struct MethodInfo
     {
         RawMethodHandler handler;
@@ -196,7 +136,6 @@ private:
     }
     
     LogHandler logHandler_;
-    bool introspecting_;
     MethodInfo[string] methods_;
 }
 
@@ -288,6 +227,57 @@ RawMethodHandler makeRawMethod(alias method)()
             return paramsToVariantArray(output);
         }
     };
+}
+
+void addSystemMethods(Server server)
+{
+    Server.MethodInfo* findMethod(string methodName)
+    {
+        auto infoPtr = methodName in server.methods_;
+        const msg = "No such method: " ~ methodName;
+        enforce(infoPtr, new MethodFaultException(msg, -1));
+        return infoPtr;
+    }
+    
+    string[] listMethods() { return server.methods_.keys(); }
+    server.addMethod!(listMethods, "system.listMethods")();
+    
+    string methodHelp(string name) { return findMethod(name).help; }
+    server.addMethod!(methodHelp, "system.methodHelp")();
+    
+    Variant methodSignature(string name)              // This one is tricky
+    {
+        auto signatures = findMethod(name).signatures;
+        if (signatures.length == 0)
+            return Variant("undef");                  // Return type is computed at runtime
+        Variant[] variantSignatures;
+        variantSignatures.length = signatures.length;
+        foreach (signIndex, sign; signatures)
+        {
+            Variant[] variantSign;
+            variantSign.length = sign.length;
+            foreach (typeIndex, type; sign)
+                variantSign[typeIndex] = Variant(type);
+            variantSignatures[signIndex] = variantSign;
+        }
+        return Variant(variantSignatures); // array of arrays of strings
+    }
+    server.addMethod!(methodSignature, "system.methodSignature")();
+    
+    string[string][string] getCapabilities()
+    {
+        string[string][string] capabilities;
+        void cap(string name, string specUrl, string specVersion)
+        {
+            capabilities[name] = ["specUrl": specUrl, "specVersion": specVersion];
+        }
+        cap("xmlrpc", "http://www.xmlrpc.com/spec", "1");
+        cap("introspection", "http://phpxmlrpc.sourceforge.net/doc-2/ch10.html", "2");
+        return capabilities;
+    }
+    server.addMethod!(getCapabilities, "system.getCapabilities")();
+    
+    // TODO: multicall
 }
 
 version (xmlrpc_unittest) unittest
@@ -423,14 +413,6 @@ version (xmlrpc_unittest) unittest
      * Introspection
      */
     auto capabilities = call!("system.getCapabilities", string[string][string])();
-    assert(capabilities.length == 1);
-    assert(capabilities["xmlrpc"] == ["specUrl": "http://www.xmlrpc.com/spec", "specVersion": "1"]);
-    
-    assert(!server.introspecting);
-    server.addIntrospectionMethods();
-    assert(server.introspecting);
-    
-    capabilities = call!("system.getCapabilities", string[string][string])();
     assert(capabilities.length == 2);
     assert(capabilities["xmlrpc"] == ["specUrl": "http://www.xmlrpc.com/spec", "specVersion": "1"]);
     assert(capabilities["introspection"] ==
