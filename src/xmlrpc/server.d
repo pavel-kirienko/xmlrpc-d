@@ -185,47 +185,31 @@ RawMethodHandler makeRawMethod(alias method)()
     
     return (Variant[] inputVariant)  // Well, the life is getting tough now.
     {
-        // Input resolution
         static if (Input.length == 0)
         {
             enforce(inputVariant.length == 0,
                 new MethodFaultException("Method expects no arguments", FciFaultCodes.serverErrorInvalidMethodParams));
             
             static if (is(Output == void))
-            {
                 method();
-            }
             else
-            {
                 Output output = method();
-            }
         }
         else
         {
             Input input = tryVariantArrayToParams!(Input)(inputVariant);
             static if (is(Output == void))
-            {
                 method(input);
-            }
             else
-            {
                 Output output = method(input);
-            }
         }
-        // Output resolution
+        
         static if (is(Output == void))
-        {
-            Variant[] dummy;
-            return dummy;
-        }
+            return cast(Variant[])[];
         else static if (is(typeof( paramsToVariantArray(output.expand) )))
-        {
             return paramsToVariantArray(output.expand);
-        }
         else
-        {
             return paramsToVariantArray(output);
-        }
     };
 }
 
