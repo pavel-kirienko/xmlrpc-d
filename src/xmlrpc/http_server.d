@@ -47,7 +47,7 @@ alias HttpResponseData delegate(HttpRequestData) RequestHandler;
 
 @trusted:
 
-class HttpServerBob
+class HttpServer
 {
     this(Address address)
     {
@@ -56,6 +56,11 @@ class HttpServerBob
         listener.bind(address);
         listener.listen(10);
         debug (http) writefln("Listening on %s", this.address);
+    }
+
+    this(ushort port)
+    {
+        this(new InternetAddress(port));
     }
 
     ~this()
@@ -457,7 +462,7 @@ version (http_server_unittest) unittest
 {
     import std.functional;
 
-    auto server = new HttpServerBob(new InternetAddress(1024));
+    auto server = new HttpServer(new InternetAddress(1024));
 
     HttpResponseData handler(HttpRequestData request)
     {

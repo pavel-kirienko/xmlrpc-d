@@ -24,7 +24,7 @@ alias Variant[] delegate(Variant[]) RawMethodHandler;
 
 class Server
 {
-    this(ErrorLogHandler errorLogHandler = null, bool addIntrospectionMethods = false)
+    this(ErrorLogHandler errorLogHandler = null)
     {
         if (!errorLogHandler)
             errorLogHandler = (msg) => write(msg);
