@@ -65,13 +65,9 @@ class Client
             
             // Perform automatic return type conversion if requested, otherwise return Variant[] as is
             static if (ReturnTypes.length == 0)
-            {
                 return vars;
-            }
             else
-            {
                 return variantArrayToParams!(ReturnTypes)(vars);
-            }
         }
     }
     

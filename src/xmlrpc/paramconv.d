@@ -43,10 +43,10 @@ auto variantArrayToParams(Args...)(Variant[] variants)
         new ParameterConversionException(format("Wrong number of arguments: expected %s, got %s)",
                                                 Args.length, variants.length)));
     
+    static if (Args.length == 0)
+        return;
     static if (Args.length == 1)  // Special case
-    {
         return variantToParam!(Args[0])(variants[0]);
-    }
     else
     {
         Tuple!(Args) returnValue;
@@ -80,7 +80,7 @@ Arg variantToParam(Arg)(Variant var)
         static assert(isImplicitlyConvertible!(KeyType!Arg, const(string)) ||
                       "Associative array key type must be implicitly convertible to string");
         Arg assocArray;
-        // intermediate array is required because iterating over the Variant(Value[Key]) does not work
+        // Intermediate array is required because iterating over the Variant(Value[Key]) is not possible
         auto intermediate = var.get!(Variant[string])();
         foreach (key, ref value; intermediate)
             assocArray[key] = variantToParam!(ValueType!Arg)(value);
@@ -123,11 +123,11 @@ Variant paramToVariant(Arg)(Arg arg)
         foreach (key, rawValue; arg)
         {
             Variant value = paramToVariant(rawValue);
-            hash[to!string(key)] = value;              // NOTE: Any Variant will be silently turned into string
+            hash[to!string(key)] = value;              // Any Variant turns into string
         }
         return Variant(hash);
     }
-    else static if (isScalarType!Arg)                  // NOTE: Get rid of type qualifiers
+    else static if (isScalarType!Arg)                  // Get rid of type qualifiers
     {
         return Variant(to!(Unqual!Arg)(arg));
     }

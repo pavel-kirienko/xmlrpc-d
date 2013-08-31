@@ -71,7 +71,7 @@ Element encodeParam(Variant param)
 Element encodeValue(Variant param)
 {
     auto node = new Element("value");
-    // TODO: allow associative arrays with keys of arbitrary type, then silently convert to string?
+    // TODO: allow associative arrays with keys of arbitrary type?
     if (param.convertsTo!XmlRpcStruct)
         node ~= encodeStructValue(param);
     else if (param.convertsTo!XmlRpcArray)

@@ -27,7 +27,7 @@ class Server
     this(ErrorLogHandler errorLogHandler = null, bool addIntrospectionMethods = false)
     {
         if (!errorLogHandler)
-            errorLogHandler = (string msg) => write(msg);
+            errorLogHandler = (msg) => write(msg);
         errorLogHandler_ = errorLogHandler;
         addSystemMethods(this);
     }
@@ -255,7 +255,7 @@ void addSystemMethods(Server server)
                 variantSign[typeIndex] = Variant(type);
             variantSignatures[signIndex] = variantSign;
         }
-        return Variant(variantSignatures); // array of arrays of strings
+        return Variant(variantSignatures); // Array of arrays of strings
     }
     
     string[string][string] getCapabilities()
