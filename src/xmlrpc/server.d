@@ -20,12 +20,14 @@ import std.traits : isCallable, ParameterTypeTuple, ReturnType;
 alias void delegate(string) ErrorLogHandler;
 alias Variant[] delegate(Variant[]) RawMethodHandler;
 
+@trusted:
+
 class Server
 {
     this(ErrorLogHandler errorLogHandler = null, bool addIntrospectionMethods = false)
     {
         if (!errorLogHandler)
-            errorLogHandler = (string msg) { write(msg); };
+            errorLogHandler = (string msg) => write(msg);
         errorLogHandler_ = errorLogHandler;
         addSystemMethods(this);
     }
@@ -205,7 +207,10 @@ RawMethodHandler makeRawMethod(alias method)()
         }
         
         static if (is(Output == void))
-            return cast(Variant[])[];
+        {
+            Variant[] dummy;
+            return dummy;
+        }
         else static if (is(typeof( paramsToVariantArray(output.expand) )))
             return paramsToVariantArray(output.expand);
         else

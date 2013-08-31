@@ -18,6 +18,8 @@ import std.array : replace;
 import std.datetime : DateTime;
 import std.base64 : Base64;
 
+@trusted:
+
 class DecoderException : XmlRpcException
 {
     private this(string msg, string file = __FILE__, size_t line = __LINE__)

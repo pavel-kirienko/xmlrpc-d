@@ -19,6 +19,8 @@ static import curl = std.net.curl;
 
 pragma(lib, "curl");
 
+@trusted:
+
 class Client
 {
     this(string serverUri, Duration timeout = dur!"seconds"(10))

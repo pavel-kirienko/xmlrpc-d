@@ -8,6 +8,8 @@ import xmlrpc.data;
 import std.exception;
 import std.stdio;
 
+@safe:
+
 class XmlRpcException : Exception
 {
     this(string msg, string file = __FILE__, size_t line = __LINE__, Throwable next = null)
@@ -24,7 +26,7 @@ class MethodFaultException : XmlRpcException
         super(message);
     }
     
-    package this(Variant value)
+    @trusted package this(Variant value)
     {
         this(value, format("XMLRPC method failure: %s", value.toString()));
     }

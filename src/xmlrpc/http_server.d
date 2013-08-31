@@ -45,6 +45,8 @@ import std.algorithm;
 
 alias HttpResponseData delegate(HttpRequestData) RequestHandler;
 
+@trusted:
+
 class HttpServerBob
 {
     this(Address address)

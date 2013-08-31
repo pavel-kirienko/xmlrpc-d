@@ -17,6 +17,8 @@ import std.stdio : writeln;
 import std.traits : isAssociativeArray, isArray, isImplicitlyConvertible, KeyType, ValueType, isSomeString,
                     isScalarType, Unqual;
 
+@trusted:
+
 class ParameterConversionException : XmlRpcException
 {
     private this(string msg, string file = __FILE__, size_t line = __LINE__)

@@ -16,6 +16,8 @@ import std.datetime : DateTime;
 import std.base64 : Base64;
 import std.stdio : writeln;
 
+@trusted:
+
 class EncoderException : XmlRpcException
 {
     private this(string msg, string file = __FILE__, size_t line = __LINE__)

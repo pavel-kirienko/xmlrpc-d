@@ -13,6 +13,8 @@ import std.string : format;
 alias Variant[] XmlRpcArray;
 alias Variant[string] XmlRpcStruct;
 
+@trusted:
+
 struct MethodCallData
 {
     string name;
