@@ -185,13 +185,26 @@ private:
             HttpRequestData request;
             if (!client.parser.handleRead(data[0..size], request))
                 return true;
+            
+            client.keepAlive = needToKeepAlive(request);
+            
             if (!requestHandler)
             {
                 debug (http) writeln("Request ignored because the handler is not configured");
                 return false;
             }
-            client.keepAlive = needToKeepAlive(request);
-            auto response = requestHandler(request);
+            
+            HttpResponseData response;
+            try
+                response = requestHandler(request);
+            catch (Exception ex)
+            {
+                debug (http) writefln("Request handler exception: %s", ex);
+                auto errorString = "Internal Server Error\n" ~ ex.msg;
+                response.code = 500; // HTTP Internal Server Error
+                response.data = cast(const(ubyte)[])errorString;
+            }
+            
             auto encodedResponse = generateHttpResponse(response);
             debug (http) writefln("Response %s bytes", encodedResponse.length);
             client.bufWrite ~= encodedResponse;
