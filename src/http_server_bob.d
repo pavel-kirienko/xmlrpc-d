@@ -448,7 +448,7 @@ unittest
     input.headers ~= [["One-Header", "to-rule-them-all"]];
     input.data = cast(const(ubyte)[])"Data";
     const output = generateHttpResponse(input);
-    const expected = "HTTP/1.x 200\r\nOne-Header: to-rule-them-all\r\nContent-Length: 4\r\n\r\nData";
+    const expected = "HTTP/1.1 200 \r\nOne-Header: to-rule-them-all\r\nContent-Length: 4\r\n\r\nData";
     assert(output == expected);
 }
 

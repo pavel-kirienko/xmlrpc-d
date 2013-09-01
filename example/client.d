@@ -105,7 +105,7 @@ void main(string[] args)
     rawCallData.name = "superDynamicMethod";
     rawCallData.params = [Variant(true), Variant("Fire in oxygen garden!")];
     
-    auto rawResponseData = client.rawCall(rawCallData, false/* suppress MethodFaultException on method fault */);
+    auto rawResponseData = client.rawCall(rawCallData, true/* suppress MethodFaultException on method fault */);
     
     assert(rawResponseData.fault == false);
     assert(rawResponseData.params[0] == "true");

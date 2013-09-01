@@ -78,7 +78,7 @@ void main(string[] args)
         const errorMessage = "I don't like this type: " ~ typeName;
         /* 
          * Method can ask the server to return XMLRPC Fault Response by throwing xmlrpc.error.MethodFaultException
-         * Any other exception will trigger Fault Response too, but the error code would be
+         * Any other exception triggers Fault Response too, but the error code would be
          *     xmlrpc.error.FciFaultCodes.applicationError
          * Other standard error codes are available from xmlrpc.error.FciFaultCodes
          */
@@ -115,7 +115,7 @@ void main(string[] args)
     // Lists all registered methods:
     writeln("XMLRPC methods: ", xmlrpc.methods);
     
-    // Note that it is possible to override system methods (if you really know what are you doing):
+    // It is possible to override system methods (if you really know what are you doing):
     string myNewHelpMethod() { return "Call 911 if you need help"; }
     xmlrpc.removeMethod("system.methodHelp");
     xmlrpc.addMethod!(myNewHelpMethod, "system.methodHelp")();

@@ -29,7 +29,7 @@ class Client
         timeout_ = timeout;
     }
     
-    final MethodResponseData rawCall(MethodCallData callData, bool throwOnMethodFault = true)
+    final MethodResponseData rawCall(MethodCallData callData, bool suppressMethodFaultException = false)
     {
         const requestString = encodeCall(callData);
         
@@ -42,7 +42,7 @@ class Client
         debug (xmlrpc)
             writefln("client <== %s", responseData.toString());
         
-        if (throwOnMethodFault && responseData.fault)
+        if (!suppressMethodFaultException && responseData.fault)
         {
             Variant faultValue;
             if (responseData.params.length > 0)
@@ -61,7 +61,7 @@ class Client
         {
             auto requestParams = paramsToVariantArray(args);
             auto callData = MethodCallData(methodName, requestParams);
-            Variant[] vars = rawCall(callData, true).params;
+            Variant[] vars = rawCall(callData).params;
             
             // Perform automatic return type conversion if requested, otherwise return Variant[] as is
             static if (ReturnTypes.length == 0)
