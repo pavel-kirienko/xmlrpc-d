@@ -23,12 +23,43 @@ pragma(lib, "curl");
 
 class Client
 {
-    this(string serverUri, Duration timeout = dur!"seconds"(10))
+    /**
+     * Params:
+     *     serverUri = Remote server endpoint, like "http://localhost:8000"
+     *     timeout   = HTTP(S) request timeout
+     */
+    nothrow this(string serverUri, Duration timeout = dur!"seconds"(10))
     {
         serverUri_ = serverUri;
         timeout_ = timeout;
     }
     
+    /**
+     * Calls XML-RPC method. Parameters are converted automatically.
+     * Throws: TransportException on HTTP(S) error, MethodFaultException on the remote method fault
+     */
+    template call(string methodName, ReturnTypes...)
+    {
+        final auto call(Args...)(Args args)
+        {
+            auto requestParams = paramsToVariantArray(args);
+            auto callData = MethodCallData(methodName, requestParams);
+            Variant[] vars = rawCall(callData).params;
+            
+            // Perform automatic return type conversion if requested, otherwise return Variant[] as is
+            static if (ReturnTypes.length == 0)
+                return vars;
+            else
+                return variantArrayToParams!(ReturnTypes)(vars);
+        }
+    }
+    
+    /**
+     * Performs call to the XML-RPC method with no automatic type casting.
+     * Throws:
+     *     TransportException on HTTP(S) error
+     *     MethodFaultException on the remote method fault
+     */
     final MethodResponseData rawCall(MethodCallData callData, bool suppressMethodFaultException = false)
     {
         const requestString = encodeCall(callData);
@@ -55,26 +86,10 @@ class Client
         return responseData;
     }
     
-    template call(string methodName, ReturnTypes...)
-    {
-        final auto call(Args...)(Args args)
-        {
-            auto requestParams = paramsToVariantArray(args);
-            auto callData = MethodCallData(methodName, requestParams);
-            Variant[] vars = rawCall(callData).params;
-            
-            // Perform automatic return type conversion if requested, otherwise return Variant[] as is
-            static if (ReturnTypes.length == 0)
-                return vars;
-            else
-                return variantArrayToParams!(ReturnTypes)(vars);
-        }
-    }
+    @property nothrow string serverUri() const { return serverUri_; }
     
-    @property string serverUri() const { return serverUri_; }
-    
-    @property Duration timeout() const { return timeout_; }
-    @property void timeout(Duration timeout) { timeout_ = timeout; }
+    @property nothrow Duration timeout() const { return timeout_; }
+    @property nothrow void timeout(Duration timeout) { timeout_ = timeout; }
     
 private:
     string performHttpRequest(string data)

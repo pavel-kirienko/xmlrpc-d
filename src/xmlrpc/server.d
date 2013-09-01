@@ -24,6 +24,10 @@ alias Variant[] delegate(Variant[]) RawMethodHandler;
 
 class Server
 {
+    /**
+     * Params:
+     *     errorLogHandler = Error logging delegate. By default logs are directed into stdout.
+     */
     this(ErrorLogHandler errorLogHandler = null)
     {
         if (!errorLogHandler)
@@ -32,6 +36,12 @@ class Server
         addSystemMethods(this);
     }
     
+    /**
+     * Handles one XML-RPC request. Can be used with HTTP server directly.
+     * Params:
+     *     encodedRequest = Raw request, encoded in XML
+     * Returns: XML-encoded response
+     */
     string handleRequest(string encodedRequest)
     {
         try
@@ -68,6 +78,10 @@ class Server
         }
     }
     
+    /**
+     * Adds one method.
+     * Throws: MethodExistsException if method already registered
+     */
     void addRawMethod(RawMethodHandler handler, string name, string help = "", string[][] signatures = null)
     {
         enforce(name.length, new XmlRpcException("Method name must not be empty"));
@@ -76,13 +90,28 @@ class Server
         methods_[name] = MethodInfo(handler, help, signatures);
     }
     
+    /**
+     * Removes method if exists, otherwise does nothing
+     * Returns: True if the method was removed, false otherwise.
+     */
     nothrow bool removeMethod(string name)
     {
         return methods_.remove(name);
     }
     
+    /**
+     * Lists all registered methods, including system methods.
+     */
     @property string[] methods() const { return methods_.keys(); }
     
+    /**
+     * Configures error logging. 'null' disables logging.
+     * Examples:
+     * --------------------
+     * server.errorLogHandler = (msg) => write(msg);  // Write to stdout
+     * server.errorLogHandler = null;                 // Disable logging
+     * --------------------
+     */
     @property void errorLogHandler(ErrorLogHandler lh) { errorLogHandler_ = lh; }
     @property nothrow ErrorLogHandler errorLogHandler() { return errorLogHandler_; }
     
@@ -153,6 +182,9 @@ class MethodExistsException : XmlRpcException
 }
 
 /**
+ * Registers anything callable as XML-RPC method.
+ * By default method name is derived from the callable's identifier.
+ * 
  * We can't use member function here because that doesn't work with local handlers:
  * Error: template instance addMethod!(method) cannot use local 'method' as parameter to non-global template <...>
  */

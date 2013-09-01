@@ -10,6 +10,9 @@ import std.stdio;
 
 @safe:
 
+/**
+ * Root type for all XML-RPC exceptions
+ */
 class XmlRpcException : Exception
 {
     this(string msg, string file = __FILE__, size_t line = __LINE__, Throwable next = null)
@@ -18,6 +21,10 @@ class XmlRpcException : Exception
     }
 }
 
+/**
+ * Client throws this exception if the remote method returns XML-RPC Fault Response.
+ * Server catches this exception and converts it into XML-RPC Fault Response.
+ */
 class MethodFaultException : XmlRpcException
 {
     package this(Variant value, string message)
