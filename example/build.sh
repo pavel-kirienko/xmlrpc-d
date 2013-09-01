@@ -20,8 +20,7 @@ function build_one()
     target="${1%.*}"
     cmd="$D_COMPILER -w -debug=xmlrpc -odbuild -ofbuild/$target -I$LIB_ROOT $@"
     echo $cmd
-    $cmd
-    if [[ "$?" != 0 ]]; then exit 1; fi
+    $cmd || exit 1
     rm build/*.o &> /dev/null
 }
 

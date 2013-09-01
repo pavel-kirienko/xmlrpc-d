@@ -46,12 +46,18 @@ Refer to `example/server.d` to learn more.
 
 ## Advanced examples
 ```shell
-cd example
-./build.sh
+cd example && ./build.sh
 # Start the server:
 ./build/server
 # Switch to another terminal and execute the client:
 ./build/client
+```
+
+## Installation
+```shell
+# Optionally: INSTALL_PREFIX=/your/install/prefix
+# Default INSTALL_PREFIX is /usr/local/
+./build.sh install
 ```
 
 ## Requirements
