@@ -25,5 +25,6 @@ function build_one()
     rm build/*.o &> /dev/null
 }
 
+build_one readme_samples.d $XMLRPC_SOURCES $HTTP_SERVER_SOURCES
 build_one client.d $XMLRPC_SOURCES
 build_one server.d $XMLRPC_SOURCES $HTTP_SERVER_SOURCES
