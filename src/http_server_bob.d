@@ -31,7 +31,7 @@
  *     Prints extra debug info into stdout
  *
  * How to use:
- *     Consider unittest at the end of this file.
+ *     Refer to the unittest at the end of this file.
  */
 
 import std.socket;
@@ -473,20 +473,16 @@ string findHeader(string[2][] headers, string target)
 
 version (http_server_unittest) unittest
 {
-    import std.functional;
-
     auto server = new HttpServer(new InternetAddress(1024));
 
-    HttpResponseData handler(HttpRequestData request)
+    server.requestHandler = (request)
     {
         HttpResponseData resp;
         resp.headers = request.headers;
         resp.data = request.data;
         resp.data = generateHttpResponse(resp);
         return resp;
-    }
-
-    server.requestHandler = toDelegate(&handler);
+    };
 
     server.spin();
 }
