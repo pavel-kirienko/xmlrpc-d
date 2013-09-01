@@ -433,7 +433,7 @@ const(ubyte)[] generateHttpResponse(HttpResponseData response)
     response.headers ~= ["Content-Length", to!string(response.data.length)];
 
     // Generate response header
-    string header = format("HTTP/1.x %s\r\n", response.code);
+    string header = format("HTTP/1.1 %d \r\n", response.code);
     foreach (pair; response.headers)
         header ~= format("%s: %s\r\n", pair[0], pair[1]);
     header ~= "\r\n";

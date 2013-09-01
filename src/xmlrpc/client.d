@@ -29,7 +29,7 @@ class Client
         timeout_ = timeout;
     }
     
-    final MethodResponseData rawCall(MethodCallData callData, bool throwOnMethodFault = false)
+    final MethodResponseData rawCall(MethodCallData callData, bool throwOnMethodFault = true)
     {
         const requestString = encodeCall(callData);
         

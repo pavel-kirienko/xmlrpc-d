@@ -74,14 +74,14 @@ class Server
         if (name in methods_)
             throw new MethodExistsException(name);
         methods_[name] = MethodInfo(handler, help, signatures);
-        debug (xmlrpc)
-            writefln("New method: %s; Help: '%s'; Signatures: %s", name, help, signatures);
     }
     
     nothrow bool removeMethod(string name)
     {
         return methods_.remove(name);
     }
+    
+    @property string[] methods() const { return methods_.keys(); }
     
     @property void errorLogHandler(ErrorLogHandler lh) { errorLogHandler_ = lh; }
     @property nothrow ErrorLogHandler errorLogHandler() { return errorLogHandler_; }
