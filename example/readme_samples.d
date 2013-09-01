@@ -4,11 +4,12 @@
  */
 
 import std.concurrency;
+import std.stdio;
 import core.thread;
 
 void main()
 {
-    spawn(() { Thread.sleep(dur!"seconds"(1)); client(); });
+    spawn(() { Thread.sleep(dur!"seconds"(1)); client(); writeln("Done"); });
     server();
 }
 
@@ -38,9 +39,10 @@ void server()
     auto httpServer = new HttpServer(8000);
     httpServer.requestHandler = (request)
     {
-        HttpResponseData response;
-        response.data = cast(const(ubyte)[])xmlrpcServer.handleRequest(cast(string)request.data);
-        return response;
+        HttpResponseData httpResponse;
+        auto encodedResponse = xmlrpcServer.handleRequest(cast(string)request.data);
+        httpResponse.data = cast(const(ubyte)[])encodedResponse;
+        return httpResponse;
     };
     
     real multiply(real a, real b) { return a * b; }

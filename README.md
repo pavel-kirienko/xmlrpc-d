@@ -1,7 +1,7 @@
-XML RPC Library for D Programming Language
+XML-RPC for D Programming Language
 ========
-
-Client:
+## Basic usage
+### Client
 ```d
 import xmlrpc.client;
 
@@ -18,7 +18,7 @@ assert(swappedIntAndString[0] == 17 && swappedIntAndString[1] == "hi");
 ```
 Refer to `example/client.d` to learn more.
 
-Server:
+### Server
 ```d
 import xmlrpc.server;
 import http_server_bob;
@@ -28,9 +28,10 @@ auto xmlrpcServer = new Server();
 auto httpServer = new HttpServer(8000);
 httpServer.requestHandler = (request)
 {
-    HttpResponseData response;
-    response.data = cast(const(ubyte)[])xmlrpcServer.handleRequest(cast(string)request.data);
-    return response;
+    HttpResponseData httpResponse;
+    auto encodedResponse = xmlrpcServer.handleRequest(cast(string)request.data);
+    httpResponse.data = cast(const(ubyte)[])encodedResponse;
+    return httpResponse;
 };
 
 real multiply(real a, real b) { return a * b; }
@@ -42,3 +43,16 @@ xmlrpcServer.addRawMethod(&swap, "swap");
 httpServer.spin();
 ```
 Refer to `example/server.d` to learn more.
+
+## Advanced examples
+```shell
+cd example
+./build.sh
+# Start the server:
+./build/server
+# Switch to another terminal and execute the client:
+./build/client
+```
+
+## Requirements
+Currently the client part of the library uses `libcurl`.
