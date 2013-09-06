@@ -77,9 +77,9 @@ class HttpServer
     void spin(Duration timeout)
     {
         const deadline = Clock.currTime + timeout;
-        while (Clock.currTime < deadline)
+        while (1)
         {
-            const selectTimeout = Clock.currTime - deadline;
+            const selectTimeout = deadline - Clock.currTime;
             if (selectTimeout.isNegative)
                 break;
             spinOnce(selectTimeout);
@@ -88,7 +88,7 @@ class HttpServer
 
     void spin()
     {
-        for (;;)
+        while (1)
             spinOnce(dur!"minutes"(1));
     }
 
@@ -484,5 +484,9 @@ version (http_server_unittest) unittest
         return resp;
     };
 
-    server.spin();
+    while (1)
+    {
+        server.spin(dur!"seconds"(10));
+        writeln("10 seconds passed...");
+    }
 }
