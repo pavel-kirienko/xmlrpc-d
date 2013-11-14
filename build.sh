@@ -44,11 +44,15 @@ case $1 in
         execute sudo cp build/xmlrpc-d.a $INSTALL_PREFIX/lib
         execute sudo cp $HTTP_SERVER_SOURCES $INSTALL_PREFIX/src
         ;;
+    test)
+        src="$XMLRPC_SOURCES $HTTP_SERVER_SOURCES"
+        execute $D_COMPILER -w -I$LIB_ROOT -ofbuild/test -main -unittest -version=xmlrpc_unittest -debug=xmlrpc $src
+        ;;
     http_test)
         execute $D_COMPILER -w -ofbuild/http_test -main -unittest -version=http_server_unittest -debug=http $HTTP_SERVER_SOURCES
         ;;
     *)
-        src="$XMLRPC_SOURCES $HTTP_SERVER_SOURCES"
-        execute $D_COMPILER -w -I$LIB_ROOT -ofbuild/test -main -unittest -version=xmlrpc_unittest -debug=xmlrpc $src
+        echo "Usage: $0 <command>"
+        echo "Commands: clean lib install test http_test"
         ;;
 esac
