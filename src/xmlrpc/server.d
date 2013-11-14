@@ -14,7 +14,7 @@ import std.exception : enforce;
 import std.variant : Variant, VariantException;
 import std.string : format;
 import std.conv : to;
-import std.stdio : writefln, write;
+import std.stdio : writefln;
 import std.traits : isCallable, ParameterTypeTuple, ReturnType;
 
 alias void delegate(string) ErrorLogHandler;
@@ -26,12 +26,10 @@ class Server
 {
     /**
      * Params:
-     *     errorLogHandler = Error logging delegate. By default logs are directed into stdout.
+     *     errorLogHandler = Error logging delegate. Disabled by default. Refer to the property description.
      */
     this(ErrorLogHandler errorLogHandler = null)
     {
-        if (!errorLogHandler)
-            errorLogHandler = (msg) => write(msg);
         errorLogHandler_ = errorLogHandler;
         addSystemMethods(this);
     }
@@ -357,7 +355,7 @@ version (xmlrpc_unittest) unittest
     import std.typecons : tuple;
     import std.exception : assertThrown;
     import std.algorithm : canFind;
-    import std.stdio : writeln;
+    import std.stdio : writeln, write;
     
     /*
      * Issue a request on the server instance
@@ -389,6 +387,7 @@ version (xmlrpc_unittest) unittest
     }
     
     auto server = new Server();
+    server.errorLogHandler = (msg) => write(msg);
     
     /*
      * Various combinations of the argument types and the return types are tested below.

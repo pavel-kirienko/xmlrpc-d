@@ -21,6 +21,7 @@ void main(string[] args)
      * Initializing the XMLRPC server
      */
     auto xmlrpc = new Server();
+    xmlrpc.errorLogHandler = (msg) => write(msg);  // Setting up the error message handler (muted by default)
     
     /*
      * Initializing the HTTP server, connecting it with XMLRPC server
